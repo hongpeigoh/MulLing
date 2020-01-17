@@ -1,6 +1,7 @@
 import numpy as np
-from . import processing, get
 import statistics
+from . import processing, get
+from pkgs import LASER
 
 
 '''
@@ -160,21 +161,18 @@ def mulling_query(self, q, k, L=-1, kdtree = True, normalize_top_L = False):
 
     results = []
     if normalize_top_L:
-        mean = dict()
         if kdtree:
             for lang in self.langs:
                 results += vec_kdtree_query(self,vecs, lang, L)
-                mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
-            # Get first item, normalized by the average cosine similarity of the top l results of that language
-            results = map( lambda x: (x[0]/mean[x[2]] , x[1], x[2]) , results)
-            return sorted(results, key=get._getitem)[:k]
+                self.means[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+            # Get first item, normalized by the average cosine similarity of the top L results of that language
+            return sorted(results, key=lambda tuple_: get._getnormalized_L_item(self, tuple_))[:k]
         else:
             for lang in self.langs:
                 results += vec_query(self,vecs, lang, L)
-                mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
-            # Get first item, normalized by the average cosine similarity of the top l results of that language
-            results = map( lambda x: ( x[0]/mean[x[2]] , x[1], x[2]) , results)
-            return sorted(results, key=get._getitem)[:-k-1:-1]
+                self.means[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+            # Get first item, normalized by the average cosine similarity of the top L results of that language
+            return sorted(results, key=lambda tuple_: get._getnormalized_L_item(self, tuple_))[:-k-1:-1]
 
     else:
         if kdtree:
@@ -185,3 +183,44 @@ def mulling_query(self, q, k, L=-1, kdtree = True, normalize_top_L = False):
             for lang in self.langs:
                 results += vec_query(self, vecs, lang, L)
             return sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
+
+'''
+Input Multilingual Query, searched on LASER Sentence Embeddings
+k : Number of ranked search results returned as (CosineSimilarity, ArticleIndex, Language)
+L : Maximum number of search results returned from any particular language. 
+    Only valid for large k ≥ 30
+normalize_top_L = True : normalizes the returned results by the mean cosine similarity of the top L results
+'''
+def LASER_query(self, q, k, L=-1, normalize_top_L = False):
+    if L == -1:
+        L = k
+    elif k<30:
+        L = k
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    
+    q_vecs = LASER.get_vect(q)
+
+    results = list()
+    for lang in self.langs:
+        cs_rrl = [0 for _ in range(L)]          # Cosine Similarity Ranked Relevance List
+        ai_rrl = [0 for _ in range(L)]          # Article Index Ranked Relevance List
+        for index, vec in enumerate(self.lasers[lang]):
+            r = np.dot( q_vecs, vec[0]) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec[0]) )
+            m = 0
+            while(m < L):
+                if r < cs_rrl[m]:
+                    m += 1 
+                else: 
+                    break
+            if m < L:
+                cs_rrl.insert(m, r)
+                ai_rrl.insert(m, index)
+                cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
+        self.means[lang] = statistics.mean(list(list(cs)[0] for cs in cs_rrl))
+        results += list((cs, ai, lang) for cs,ai in list(zip(cs_rrl, ai_rrl)))
+
+    if normalize_top_L:
+        return sorted(results, key=lambda tuple_: get._getnormalized_L_item(self, tuple_))[:-k-1:-1]
+    else:
+        return sorted(results)[:-k-1:-1]
