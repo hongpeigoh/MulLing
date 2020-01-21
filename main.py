@@ -1,13 +1,12 @@
 import numpy as np
 import os.path
 import pickle
-import math
 from scipy import spatial
 from collections import defaultdict
 from dataclasses import dataclass
 from pkgs.FastText import FastVector
-from pkgs import LASER
-from src import processing
+from pks import LASER
+from src import get, processing, query
 
 @dataclass(unsafe_hash=True)
 class MulLingVectors:
@@ -29,7 +28,7 @@ class MulLingVectors:
         - Bahasa Melayu (ms)
         - Tamil (ta)
         """
-        methods = [1, 2, 3, 4, 5]
+        methods = [1, 2, 3, 4, 5, 9]
         assert method in methods, TypeError('Invalid method type. Use integer from 1 to 4 instead.')
         self.method = method
         self.langs = langs
@@ -40,7 +39,6 @@ class MulLingVectors:
         self.idfs = {}
         self.kdtrees = {}
         self.lasers = {}
-        self.means = {}
 
         if self.method==3 or self.method==4:
             paths = {
@@ -48,18 +46,8 @@ class MulLingVectors:
                 'idfs': 'pickle/idfs2.pkl',
                 'metadocvecs': 'pickle/metadocvecs.pkl',
             }
-            print('Loading ' + ', '.join(list(paths.keys())) + ' from disk')
             self.docvecs = pickle.load( open(paths['docvecs'], 'rb'))
             self.idfs = pickle.load( open(paths['idfs'], 'rb'))
-            self.metadocvecs = pickle.load( open(paths['metadocvecs'], 'rb'))
-
-        if self.method==5:
-            paths = {
-                'metadocvecs': 'pickle/metadocvecs.pkl',
-                'laser': 'pickle/laser.pkl'
-            }
-            print('Loading ' + ', '.join(list(paths.keys())) + ' from disk')
-            self.lasers = pickle.load(open(paths['laser'], 'rb'))
             self.metadocvecs = pickle.load( open(paths['metadocvecs'], 'rb'))
 
         for lang in self.langs:
@@ -80,10 +68,10 @@ class MulLingVectors:
                 else:
                     self.calculate2_docvecs(lang)
 
-            # Calculate document vectors using LASER
+            # Calculate documents vectors using LASER
             elif self.method == 5:
                 if lang in self.lasers:
-                    print('The {} LASER vectors are already loaded!'.format(lang))
+                    print('The {} LASER document vectors are already loaded')
                 else:
                     self.calculate3_docvecs(lang)
             
@@ -94,27 +82,29 @@ class MulLingVectors:
                 self.calculate_metadocvecs(lang)
 
             #Set up KD-Trees for subsequent queries
-            # print('Instancing {} KD-Tree'.format(lang))
-            # self.kdtrees[lang] = spatial.KDTree(list(map(lambda x: x/np.linalg.norm(x), self.docvecs[lang])))
-            # print('KD-tree loaded!')
+            print('Instancing {} KD-Tree'.format(lang))
+            try:
+                self.kdtrees[lang] = spatial.KDTree(list(map(lambda x: x/np.linalg.norm(x), self.docvecs[lang])))
+                print('KD-tree loaded!')
+            except:
+                print('KD-tree failed to load, continuing without KD-tree')
         print('All vector dictionaries loaded!')
         
     # Load the selected language into the class 'MulLingVectors'
     def load(self, lang:str):
-        if self.method != 5:
-            # Load aligned word vectors
-            if not os.path.isfile('vecs/nb-{}-dump.txt'.format(lang)):
-                raise IOError('File vecs/nb-{}-dump.txt does not exist'.format(lang))
-            else:
-                print('Importing FastText Vectors for {}'.format(lang))
-                self.vecs[lang] = FastVector(vector_file = 'vecs/nb-{}-dump.txt'.format(lang))
+        # Load aligned word vectors
+        if not os.path.isfile('dump/{}/wordvecs.txt'.format(lang)):
+            raise IOError('File dump/{}/wordvecs.txt does not exist'.format(lang))
+        else:
+            print('Importing FastText Vectors for {}'.format(lang))
+            self.vecs[lang] = FastVector(vector_file = 'dump/{}/wordvecs.txt'.format(lang))
         
         # Load monolingual corpora
-        if not os.path.isfile('articles/articles-{}.pkl'.format(lang)):
-            raise IOError('File articles/articles-{}.pkl does not exist'.format(lang))
+        if not os.path.isfile('dump/{}/articles.pkl'.format(lang)):
+            raise IOError('File dump/{}/articles.pkl does not exist'.format(lang))
         else:
-            print('Importing articles from articles/articles-{}.pkl'.format(lang))
-            self.docs[lang] = pickle.load(open('articles/articles-{}.pkl'.format(lang), 'rb'))
+            print('Importing articles from dump/{}/articles.pkl'.format(lang))
+            self.docs[lang] = pickle.load(open('dump/{}/articles.pkl'.format(lang), 'rb'))
 
     def calculate_docvecs(self, lang:str):
         # Calculate summation of document vectors by vector addition.
@@ -183,14 +173,19 @@ class MulLingVectors:
             self.metadocvecs[lang].append(sum(np.array(vec) for vec in t_tokens_vecs))
 
     def calculate3_docvecs(self, lang:str):
-        # Calculate document vectors using LASER sentence embeddings
+        # Calculate document vectors using LASER Sentence Embeddings
         print('Loading document vectors using LASER')
         self.lasers[lang] = list()
 
         for doc in self.docs[lang]:
-            text = doc[1].replace('\n',' ')
+            text = doc[1].replace('\n', ' ')
             vec = LASER.get_vect(text)
-            if isinstance( vec, (list,tuple,np.ndarray)):
+            if isisntance(vec, (list, tuple, np.ndarray)):
                 self.lasers[lang].append(vec)
             else:
                 self.docs[lang].remove(doc)
+
+if __name__ == "__main__":
+    from src import get, query, processing
+
+    MulLing_Object = MulLingVectors(method=input('Select method from 1 to 5: '), lang=['en','zh','ms'])
