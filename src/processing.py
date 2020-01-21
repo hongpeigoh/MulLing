@@ -14,15 +14,15 @@ stopwords = dict()
 langs = ['en','zh','ms','ta']
 for lang in langs:
     if lang == 'zh':
-        f = codecs.open('stopwords/stopwords-zh.txt', encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-zh
+        f = codecs.open('dump/{}/stopwords.txt'.format(lang), encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-zh
         stopwords[lang] = [str(line)[0] for line in f][1:]
         f.close()
     elif lang == 'ms':
-        f = codecs.open('stopwords/stopwords-ms.txt', encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-ms
+        f = codecs.open('dump/{}/stopwords.txt'.format(lang), encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-ms
         stopwords[lang] = [repr(line)[1:-5] for line in f][1:]
         f.close()
     elif lang == 'ta':
-        f = codecs.open('stopwords/stopwords-ta.txt', encoding='utf-8')    # https://github.com/AshokR/TamilNLP/blob/master/Resources/TamilStopWords.txt
+        f = codecs.open('dump/{}/stopwords.txt'.format(lang), encoding='utf-8')    # https://github.com/AshokR/TamilNLP/blob/master/Resources/TamilStopWords.txt
         stopwords[lang] = [repr(line)[1:-5] for line in f][1:]
         f.close()
 
@@ -40,7 +40,7 @@ def tokenize(lang, input):
         d_tokens = filter(lambda x: (x not in stopwords[lang] and x not in string.punctuation), d)
         return map(lambda x: str(x).lower(), d_tokens)
     elif lang == 'ta':
-        d = nlp_hi(input)
+        d = nlp_ta(input)
         d.tokenize()
         return filter(lambda x: (x not in stopwords[lang] and x not in string.punctuation), d.tokens)
 
