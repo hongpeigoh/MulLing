@@ -5,7 +5,7 @@ from scipy import spatial
 from collections import defaultdict
 from dataclasses import dataclass
 from pkgs.FastText import FastVector
-from pks import LASER
+from pkgs import LASER
 from src import get, processing, query
 
 @dataclass(unsafe_hash=True)
@@ -15,10 +15,11 @@ class MulLingVectors:
         Methods
         --------------------
         Method 1: BWE-Agg-Add
-        Method 2: BWE-Agg-IDF
-        Method 3: Pre-loaded document vectors (BWE-Agg-Add)
+        Method 2: Pre-loaded document vectors (BWE-Agg-Add)
+        Method 3: BWE-Agg-IDF
         Method 4: Pre-loaded document vectors (BWE-Agg-IDF)
         Method 5: LASER Sentence Embeddings
+        Method 6: Pre-loaded LASER Sentence Embeddings
 
         Langs
         --------------------
@@ -28,7 +29,7 @@ class MulLingVectors:
         - Bahasa Melayu (ms)
         - Tamil (ta)
         """
-        methods = [1, 2, 3, 4, 5, 9]
+        methods = [1, 2, 3, 4, 5, 6, 9]
         assert method in methods, TypeError('Invalid method type. Use integer from 1 to 4 instead.')
         self.method = method
         self.langs = langs
@@ -40,37 +41,40 @@ class MulLingVectors:
         self.kdtrees = {}
         self.lasers = {}
 
-        if self.method==3 or self.method==4:
+        if self.method%2==0:
             paths = {
                 'docvecs': 'pickle/docvecs2.pkl',
                 'idfs': 'pickle/idfs2.pkl',
                 'metadocvecs': 'pickle/metadocvecs.pkl',
+                'lasers': 'pickle/lasers.pkl'
             }
             self.docvecs = pickle.load( open(paths['docvecs'], 'rb'))
             self.idfs = pickle.load( open(paths['idfs'], 'rb'))
             self.metadocvecs = pickle.load( open(paths['metadocvecs'], 'rb'))
+            if self.method==6:
+                self.lasers = pickle.load( open(paths['lasers'], 'rb'))
 
         for lang in self.langs:
             # Load word vectors and document corpora
             self.load(lang)
 
             # Calculate document vectors using BWE-Agg-Add
-            if self.method == 1 or self.method == 3:
-                if lang in self.docvecs and self.method==3:
+            if self.method == 1 or self.method == 2:
+                if lang in self.docvecs and self.method==2:
                     print('The {} document vectors are already loaded!'.format(lang))
                 else:
                     self.calculate_docvecs(lang)
             
             # Calculate document vectors using BWE-Agg-IDF
-            elif self.method == 2 or self.method == 4:
+            elif self.method == 3 or self.method == 4:
                 if lang in self.docvecs and lang in self.idfs and self.method==4:
                     print('The {} document vectors and inverse document frequencies are already loaded!'.format(lang))
                 else:
                     self.calculate2_docvecs(lang)
 
             # Calculate documents vectors using LASER
-            elif self.method == 5:
-                if lang in self.lasers:
+            elif self.method == 5 or self.method == 6::
+                if lang in self.lasers and self.method==6:
                     print('The {} LASER document vectors are already loaded')
                 else:
                     self.calculate3_docvecs(lang)
@@ -180,7 +184,7 @@ class MulLingVectors:
         for doc in self.docs[lang]:
             text = doc[1].replace('\n', ' ')
             vec = LASER.get_vect(text)
-            if isisntance(vec, (list, tuple, np.ndarray)):
+            if isinstance(vec, (list, tuple, np.ndarray)):
                 self.lasers[lang].append(vec)
             else:
                 self.docs[lang].remove(doc)
@@ -188,4 +192,4 @@ class MulLingVectors:
 if __name__ == "__main__":
     from src import get, query, processing
 
-    MulLing_Object = MulLingVectors(method=input('Select method from 1 to 5: '), lang=['en','zh','ms'])
+    MulLing_Object = MulLingVectors(method=input('Select method from 1 to 6: '), lang=['en','zh','ms'])
