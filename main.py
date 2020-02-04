@@ -1,8 +1,9 @@
 import numpy as np
 import os.path
 import pickle
+import math
 from scipy import spatial
-from collections import defaultdict
+from collections import defaultdict, Counter
 from dataclasses import dataclass
 from pkgs.FastText import FastVector
 from pkgs import LASER
@@ -10,7 +11,7 @@ from src import get, processing, query
 
 @dataclass(unsafe_hash=True)
 class MulLingVectors:
-    def __init__(self, method=1, langs=['en', 'zh', 'ms', 'ta']):
+    def __init__(self, method=1, langs=['en', 'zh', 'ms', 'ta'], kdtree=False):
         """
         Methods
         --------------------
@@ -20,7 +21,7 @@ class MulLingVectors:
         Method 4: Pre-loaded document vectors (BWE-Agg-IDF)
         Method 5: LASER Sentence Embeddings
         Method 6: Pre-loaded LASER Sentence Embeddings
-
+        Method 10: Pre-loaded Multi-model (BWE-Agg-Add, BWE-Agg-IDF, LASER)
         Langs
         --------------------
         Implemented:
@@ -29,69 +30,88 @@ class MulLingVectors:
         - Bahasa Melayu (ms)
         - Tamil (ta)
         """
-        methods = [1, 2, 3, 4, 5, 6, 9]
-        assert method in methods, TypeError('Invalid method type. Use integer from 1 to 4 instead.')
+        methods = [1, 2, 3, 4, 5, 6, 10]
+        assert method in methods, TypeError('Invalid method type. Use integer from 1 to 6 instead.')
         self.method = method
         self.langs = langs
         self.vecs = {}
         self.docs = {}
-        self.docvecs = defaultdict(list)
-        self.metadocvecs = defaultdict(list)
+        self.docvecs = {
+            'baa': defaultdict(list),
+            'bai': defaultdict(list),
+            'meta': defaultdict(list),
+            'lasers': defaultdict(list)
+        }
         self.idfs = {}
         self.kdtrees = {}
-        self.lasers = {}
 
-        if self.method%2==0:
+        if self.method %2==0:
             paths = {
-                'docvecs': 'pickle/docvecs2.pkl',
-                'idfs': 'pickle/idfs2.pkl',
-                'metadocvecs': 'pickle/metadocvecs.pkl',
-                'lasers': 'pickle/lasers.pkl'
+                'docvecs_baa': 'pickle/docvecs_baa_new.pkl',
+                'docvecs_bai': 'pickle/docvecs_new.pkl',
+                'idfs': 'pickle/idfs_new.pkl',
+                'metadocvecs': 'pickle/metadocvecs_new.pkl',
+                'lasers': 'pickle/lasers_new.pkl'
             }
-            self.docvecs = pickle.load( open(paths['docvecs'], 'rb'))
-            self.idfs = pickle.load( open(paths['idfs'], 'rb'))
-            self.metadocvecs = pickle.load( open(paths['metadocvecs'], 'rb'))
-            if self.method==6:
-                self.lasers = pickle.load( open(paths['lasers'], 'rb'))
+            
+            if 'docvecs_baa' in paths:
+                self.docvecs['baa'] = pickle.load( open(paths['docvecs_baa'], 'rb'))
+                print('Loaded document vectors(BWE-Agg-Add)')
+            if 'docvecs_bai' in paths:
+                self.docvecs['bai'] = pickle.load( open(paths['docvecs_bai'], 'rb'))
+                print('Loaded document vectors(BWE-Agg-IDF)')
+            if 'idfs' in paths:
+                self.idfs = pickle.load( open(paths['idfs'], 'rb'))
+                print('Loaded IDFs')
+            if 'metadocvecs' in paths:
+                self.docvecs['meta'] = pickle.load( open(paths['metadocvecs'], 'rb'))
+                print('Loaded document vectors for titles')
+            if self.method == 6 or self.method == 10:
+                self.docvecs['lasers'] = pickle.load( open(paths['lasers'], 'rb'))
+                print('Loaded document vectors(LASER)')
+            print('Pre-made attributes are loaded')
 
         for lang in self.langs:
             # Load word vectors and document corpora
             self.load(lang)
 
             # Calculate document vectors using BWE-Agg-Add
-            if self.method == 1 or self.method == 2:
-                if lang in self.docvecs and self.method==2:
-                    print('The {} document vectors are already loaded!'.format(lang))
+            if self.method in [1,2,10]:
+                if lang in self.docvecs['baa']:
+                    print('The {} BWE-Agg-Add document vectors are already loaded!'.format(lang))
                 else:
                     self.calculate_docvecs(lang)
+                self.dv = self.docvecs['baa']
             
             # Calculate document vectors using BWE-Agg-IDF
-            elif self.method == 3 or self.method == 4:
-                if lang in self.docvecs and lang in self.idfs and self.method==4:
-                    print('The {} document vectors and inverse document frequencies are already loaded!'.format(lang))
+            elif self.method in [3,4,10]:
+                if lang in self.docvecs['bai'] and lang in self.idfs:
+                    print('The {} BWE-Agg-IDF document vectors and inverse document frequencies are already loaded!'.format(lang))
                 else:
                     self.calculate2_docvecs(lang)
+                self.dv = self.docvecs['baa']
 
             # Calculate documents vectors using LASER
-            elif self.method == 5 or self.method == 6::
-                if lang in self.lasers and self.method==6:
-                    print('The {} LASER document vectors are already loaded')
+            elif self.method in [5,6,10]:
+                if lang in self.docvecs['lasers']:
+                    print('The {} LASER document vectors are already loaded'.format(lang))
                 else:
                     self.calculate3_docvecs(lang)
             
             # Calculate document vectors using document meta-data (titles)
-            if lang in self.metadocvecs:
+            if lang in self.docvecs['meta']:
                 print('The {} meta-document vectors are already loaded!'.format(lang))
             else:
                 self.calculate_metadocvecs(lang)
 
-            #Set up KD-Trees for subsequent queries
-            print('Instancing {} KD-Tree'.format(lang))
-            try:
-                self.kdtrees[lang] = spatial.KDTree(list(map(lambda x: x/np.linalg.norm(x), self.docvecs[lang])))
-                print('KD-tree loaded!')
-            except:
-                print('KD-tree failed to load, continuing without KD-tree')
+            # if kdtree:
+            #     #Set up KD-Trees for subsequent queries
+            #     print('Instancing {} KD-Tree'.format(lang))
+            #     try:
+            #         self.kdtrees[lang] = spatial.KDTree(list(map(lambda x: x/np.linalg.norm(x), self.docvecs[lang])))
+            #         print('KD-tree loaded!')
+            #     except:
+            #         print('KD-tree failed to load, continuing without KD-tree')
         print('All vector dictionaries loaded!')
         
     # Load the selected language into the class 'MulLingVectors'
@@ -113,7 +133,6 @@ class MulLingVectors:
     def calculate_docvecs(self, lang:str):
         # Calculate summation of document vectors by vector addition.
         print('Calculating document vectors')
-        self.docvecs[lang] = list()
         
         for doc in self.docs[lang]:
             d_tokens = processing.tokenize(lang, doc[1])
@@ -124,9 +143,9 @@ class MulLingVectors:
                 except:
                     pass
                     #raise KeyError('{} not in {} dictionary'.format(token, lang))
-            self.docvecs[lang].append(sum(np.array(vec) for vec in d_tokens_vecs))
+            self.docvecs['baa'][lang].append(sum(np.array(vec) for vec in d_tokens_vecs))
 
-    def calculate2_docvecs(self, lang:str):
+    def calculate2_docvecs(self, lang:str, multi=False):
         # Calculate Inverse Document Frequency (IDF) on first pass
         print('Calculating IDFs')
         N = len(self.docs[lang])
@@ -156,14 +175,14 @@ class MulLingVectors:
                     #raise KeyError('{} not in {} dictionary'.format(token, lang))
             vecs = sum(np.array(vec) for vec in d_tokens_vecs)
             if isinstance(vecs, (list, tuple, np.ndarray)):
-                self.docvecs[lang].append(sum(np.array(vec) for vec in d_tokens_vecs))
+                self.docvecs['bai'][lang].append(sum(np.array(vec) for vec in d_tokens_vecs))
             else:
                 self.docs[lang].remove(doc)
 
     def calculate_metadocvecs(self, lang:str):
         # Calculate summation of meta-document vectors by vector addition.
         print('Calculating meta-document vectors')
-        self.metadocvecs[lang] = list()
+        self.docvecs['meta'][lang] = list()
         
         for doc in self.docs[lang]:
             t_tokens = processing.tokenize(lang, doc[0])
@@ -174,22 +193,22 @@ class MulLingVectors:
                 except:
                     pass
                     #raise KeyError('{} not in {} dictionary'.format(token, lang))
-            self.metadocvecs[lang].append(sum(np.array(vec) for vec in t_tokens_vecs))
+            self.docvecs['meta'][lang].append(sum(np.array(vec) for vec in t_tokens_vecs))
 
     def calculate3_docvecs(self, lang:str):
         # Calculate document vectors using LASER Sentence Embeddings
         print('Loading document vectors using LASER')
-        self.lasers[lang] = list()
+        self.docvecs['lasers'][lang] = list()
 
         for doc in self.docs[lang]:
             text = doc[1].replace('\n', ' ')
-            vec = LASER.get_vect(text)
+            vec = LASER.get_vect(text, lang=lang)
             if isinstance(vec, (list, tuple, np.ndarray)):
-                self.lasers[lang].append(vec)
+                self.docvecs['lasers'][lang].append(vec)
             else:
                 self.docs[lang].remove(doc)
 
 if __name__ == "__main__":
     from src import get, query, processing
 
-    MulLing_Object = MulLingVectors(method=input('Select method from 1 to 6: '), lang=['en','zh','ms'])
+    print('Hello World')
