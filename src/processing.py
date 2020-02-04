@@ -69,6 +69,19 @@ def vectorize(self, input_):
             try:
                 token_vecs.append(self.vecs[lang][token])
             except:
-                print(tokens)
-                raise KeyError('{} cannot be found in {} dictionary'.format(token, lang))
+                pass
+                #raise KeyError('{} cannot be found in {} dictionary'.format(token, lang))
     return sum(np.array(vec) for vec in token_vecs)
+
+def vectorize_lang(self, input_, lang):
+    tokens = tokenize(lang, input_)
+    tokens_vecs = []
+    for token in list(tokens):
+        try:
+            tokens_vecs.append(self.vecs[lang][token])
+        except:
+            pass
+            #raise KeyError('{} cannot be found in dictionary'.format(token))
+    return sum(np.array(vec) for vec in tokens_vecs)
+
+    

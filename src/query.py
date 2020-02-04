@@ -22,7 +22,7 @@ def simple_query(self, q, lang, k):
             raise KeyError('{} cannot be found in dictionary'.format(token))
     q_vecs = sum(np.array(vec) for vec in q_tokens_vecs)
 
-    for index, vec in enumerate(self.docvecs[lang]):
+    for index, vec in enumerate(self.dv[lang]):
         r = np.dot( q_vecs, vec) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec) )
         m = 0
         while(m < k):
@@ -57,10 +57,9 @@ def simple_raw_score_merge_query(self, q, lang, k):
 
     results = []
     for lang_ in self.langs:
-        print(lang_)
         cs_rrl = [0 for _ in range(k)]
         ai_rrl = [0 for _ in range(k)]
-        for index, vec in enumerate(self.docvecs[lang_]):
+        for index, vec in enumerate(self.dv[lang_]):
             r = np.dot( q_vecs, vec) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec) )
             m = 0
             while(m < k):
@@ -73,7 +72,6 @@ def simple_raw_score_merge_query(self, q, lang, k):
                 ai_rrl.insert(m, index)
                 cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
         results += list((cs, ai, lang_) for cs,ai in list(zip(cs_rrl, ai_rrl)))
-        print(results)
     return sorted(results, key=get._getitem)[:-k-1:-1]
 
 '''
@@ -101,7 +99,7 @@ using brute force on documents in query language. Top k results are returned in
 def vec_query(self, q_vecs, lang, k):
     cs_rrl = [0 for _ in range(k)]
     ai_rrl = [0 for _ in range(k)]
-    for index, vec in enumerate(self.docvecs[lang]):
+    for index, vec in enumerate(self.dv[lang]):
         r = np.dot( q_vecs, vec) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec) )
         m = 0
         while(m < k):
@@ -128,7 +126,7 @@ Results are similarly returned as (CosineSimilarity, ArticleIndex, Language)
 def title_query(self, q_vecs, lang, k):
     cs_rrl = [0 for _ in range(k)]          # Cosine Similarity Ranked Relevance List
     ai_rrl = [0 for _ in range(k)]          # Article Index Ranked Relevance List
-    for index, vec in enumerate(self.metadocvecs[lang]):
+    for index, vec in enumerate(self.docvecs['meta'][lang]):
         if not isinstance(vec, (list, tuple, np.ndarray)):
             pass
         else:
@@ -152,7 +150,7 @@ kdtree = True : uses KDTrees instead of brute force to search.
                 Cosine Similarity (Descending) is replaced with Distance (Ascending)
 normalize_top_L = True : normalizes the returned results by the mean cosine similarity of the top L results
 '''
-def mulling_query(self, q, k, L=-1, kdtree = True, normalize_top_L = False):
+def mulling_query(self, q, k, L=-1, kdtree = False, normalize_top_L = False):
     if L == -1:
         L = k
     elif k<30:
@@ -189,18 +187,13 @@ def mulling_query(self, q, k, L=-1, kdtree = True, normalize_top_L = False):
                 results += vec_query(self, vecs, lang, L)
             return sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
 
-def laser_query(self, q, k, L=-1, normalize_top_L = False):
-    if L == -1:
-        L = k
-    elif k<30:
-        L = k
-    elif k> len(self.langs)*L:
-        raise ValueError('The number of search results cannot be displayed as L is too small!')
+def laser_query(self, q, lang, k):
+    q_vecs = LASER.get_vect(q)[0]
 
-    q_vecs = LASER.get_vect(q)
-
-    for index, vec in enumerate(self.lasers[lang]):
-        r = np.dot( q_vecs, vec) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec) )
+    cs_rrl = [0 for _ in range(k)]          # Cosine Similarity Ranked Relevance List
+    ai_rrl = [0 for _ in range(k)]          # Article Index Ranked Relevance List
+    for index, vec in enumerate(self.docvecs['lasers'][lang]):
+        r = np.dot( q_vecs, vec[0]) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec[0]) )
         m = 0
         while(m < k):
             if r < cs_rrl[m]:
@@ -212,3 +205,22 @@ def laser_query(self, q, k, L=-1, normalize_top_L = False):
             ai_rrl.insert(m, index)
             cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
     return list((cs, ai, lang) for cs,ai in list(zip(cs_rrl, ai_rrl)))
+
+def laser_mulling_query(self, q, k, L=-1, normalize_top_L = False):
+    if L == -1:
+        L = k
+    elif k<30:
+        L = k
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    
+    results = list()
+    mean = dict()
+    for lang in self.langs:
+        results += laser_query(self, q, lang, L)
+        mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+    if normalize_top_L:
+        results = map( lambda x: (x[0]/mean[x[2]] , x[1], x[2]) , results)
+        return sorted(results, key=get._getitem)[:k]
+    else:
+        sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
