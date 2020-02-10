@@ -153,29 +153,25 @@ normalize_top_L = True : normalizes the returned results by the mean cosine simi
 def mulling_query(self, q, k, L=-1, kdtree = False, normalize_top_L = False):
     if L == -1:
         L = k
-    elif k<30:
-        L = k
     elif k> len(self.langs)*L:
         raise ValueError('The number of search results cannot be displayed as L is too small!')
     vecs = processing.vectorize(self,input_=q)
 
     results = []
     if normalize_top_L:
-        mean = dict()
+        self.mean = {}
         if kdtree:
             for lang in self.langs:
                 results += vec_kdtree_query(self,vecs, lang, L)
-                mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+                self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
             # Get first item, normalized by the average cosine similarity of the top l results of that language
-            results = map( lambda x: (x[0]/mean[x[2]] , x[1], x[2]) , results)
-            return sorted(results, key=get._getitem)[:k]
+            return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:k]
         else:
             for lang in self.langs:
                 results += vec_query(self,vecs, lang, L)
-                mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+                self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
             # Get first item, normalized by the average cosine similarity of the top l results of that language
-            results = map( lambda x: ( x[0]/mean[x[2]] , x[1], x[2]) , results)
-            return sorted(results, key=get._getitem)[:-k-1:-1]
+            return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:-k-1:-1]
 
     else:
         if kdtree:
@@ -209,18 +205,59 @@ def laser_query(self, q, lang, k):
 def laser_mulling_query(self, q, k, L=-1, normalize_top_L = False):
     if L == -1:
         L = k
-    elif k<30:
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    
+    self.mean = {}
+    results = list()
+    for lang in self.langs:
+        results += laser_query(self, q, lang, L)
+        self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+    if normalize_top_L:
+        return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:k]
+    else:
+        sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
+
+def ensemble_query(self, ensemble, q, k, L=-1, normalize_top_L = False):
+    if L == -1:
         L = k
     elif k> len(self.langs)*L:
         raise ValueError('The number of search results cannot be displayed as L is too small!')
     
-    results = list()
-    mean = dict()
-    for lang in self.langs:
-        results += laser_query(self, q, lang, L)
-        mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+    q_vecs = {
+        'baa':processing.vectorize(self,q),
+        'bai':processing.vectorize(self,q),
+        'lasers':LASER.get_vect(q)[0]
+    }
+
+    self.mean = {}
+    results = []
+    for lang_ in self.langs:
+        cs_rrl = [0 for _ in range(L)]
+        ai_rrl = [0 for _ in range(L)]
+        for index in range(len(self.docs[lang_])):
+            r = 0
+            for method_index, method in enumerate(['baa','bai','lasers']):
+                if method_index == 2:
+                    vec = self.docvecs[method][lang_][index][0]
+                else:
+                    vec = self.docvecs[method][lang_][index]
+                cs = np.dot( q_vecs[method], vec) / ( np.linalg.norm(q_vecs[method]) * np.linalg.norm(vec) )
+                r += ensemble[method_index] * cs
+            
+            m = 0
+            while(m < L):
+                if r < cs_rrl[m]:
+                    m += 1 
+                else: 
+                    break
+            if m < L:
+                cs_rrl.insert(m, r)
+                ai_rrl.insert(m, index)
+                cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
+        results += list((cs, ai, lang_) for cs,ai in list(zip(cs_rrl, ai_rrl)))
+        self.mean[lang_] = statistics.mean([results[-i-1][0] for i in range(L)])
     if normalize_top_L:
-        results = map( lambda x: (x[0]/mean[x[2]] , x[1], x[2]) , results)
-        return sorted(results, key=get._getitem)[:k]
+        return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:-k-1:-1]
     else:
-        sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
+        return sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]

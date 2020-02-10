@@ -13,6 +13,10 @@ def _getnormalizeditem(self, tuple_):
 def _getdenormalizeditem(self, tuple_):
     return tuple_[0] * math.log(math.log(len(self.docs[tuple_[2]])))
 
+# Get first item, normalized by the average cosine similarity of the top L results.
+def _getnormalizedtopLitem(self, tuple_):
+    return tuple_[0] / self.mean[tuple_[2]]
+
 # Get article using the language (2nd element) and the article index (3rd element)
 def _getarticle(self, tuple_):
     return self.docs[tuple_[2]][tuple_[1]]
