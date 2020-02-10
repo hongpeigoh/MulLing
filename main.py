@@ -21,6 +21,8 @@ class MulLingVectors:
         Method 4: Pre-loaded document vectors (BWE-Agg-IDF)
         Method 5: LASER Sentence Embeddings
         Method 6: Pre-loaded LASER Sentence Embeddings
+        Method 7: LASER Embeddings on Article Title
+        Method 8: Pre-loaded LASER Sentence Embeddings on Article Title
         Method 10: Pre-loaded Multi-model (BWE-Agg-Add, BWE-Agg-IDF, LASER)
         Langs
         --------------------
@@ -30,7 +32,7 @@ class MulLingVectors:
         - Bahasa Melayu (ms)
         - Tamil (ta)
         """
-        methods = [1, 2, 3, 4, 5, 6, 10]
+        methods = [1, 2, 3, 4, 5, 6, 7, 8, 10]
         assert method in methods, TypeError('Invalid method type. Use integer from 1 to 6 instead.')
         self.method = method
         self.langs = langs
@@ -40,35 +42,38 @@ class MulLingVectors:
             'baa': defaultdict(list),
             'bai': defaultdict(list),
             'meta': defaultdict(list),
-            'lasers': defaultdict(list)
+            'lasers': defaultdict(list),
+            'metalasers': defaultdict(list)
         }
         self.idfs = {}
         self.kdtrees = {}
+        self.mean = {}
 
         if self.method %2==0:
-            paths = {
+            self.paths = {
                 'docvecs_baa': 'pickle/docvecs_baa_new.pkl',
                 'docvecs_bai': 'pickle/docvecs_new.pkl',
                 'idfs': 'pickle/idfs_new.pkl',
                 'metadocvecs': 'pickle/metadocvecs_new.pkl',
-                'lasers': 'pickle/lasers_new.pkl'
+                'lasers': 'pickle/lasers_new.pkl',
+                'metalasers' : 'pickle/metalaser.pkl'
             }
             
-            if 'docvecs_baa' in paths:
-                self.docvecs['baa'] = pickle.load( open(paths['docvecs_baa'], 'rb'))
+            if 'docvecs_baa' in self.paths:
+                self.docvecs['baa'] = pickle.load( open(self.paths['docvecs_baa'], 'rb'))
                 print('Loaded document vectors(BWE-Agg-Add)')
-            if 'docvecs_bai' in paths:
-                self.docvecs['bai'] = pickle.load( open(paths['docvecs_bai'], 'rb'))
+            if 'docvecs_bai' in self.paths:
+                self.docvecs['bai'] = pickle.load( open(self.paths['docvecs_bai'], 'rb'))
                 print('Loaded document vectors(BWE-Agg-IDF)')
-            if 'idfs' in paths:
-                self.idfs = pickle.load( open(paths['idfs'], 'rb'))
-                print('Loaded IDFs')
-            if 'metadocvecs' in paths:
-                self.docvecs['meta'] = pickle.load( open(paths['metadocvecs'], 'rb'))
+            if 'metadocvecs' in self.paths:
+                self.docvecs['meta'] = pickle.load( open(self.paths['metadocvecs'], 'rb'))
                 print('Loaded document vectors for titles')
             if self.method == 6 or self.method == 10:
-                self.docvecs['lasers'] = pickle.load( open(paths['lasers'], 'rb'))
+                self.docvecs['lasers'] = pickle.load( open(self.paths['lasers'], 'rb'))
                 print('Loaded document vectors(LASER)')
+            if self.method == 8 or self.method == 10:
+                self.docvecs['metalasers'] = pickle.load( open(self.paths['metalasers'], 'rb'))
+                print('Loaded document vectors for titles in LASER')
             print('Pre-made attributes are loaded')
 
         for lang in self.langs:
@@ -97,6 +102,13 @@ class MulLingVectors:
                     print('The {} LASER document vectors are already loaded'.format(lang))
                 else:
                     self.calculate3_docvecs(lang)
+            
+            # Calculate document vectors using LASER on titles
+            elif self.method in [7,8,10]:
+                if lang in self.docvecs['metalasers']:
+                    print('The {} LASER meta-document vectors are already loaded'.format(lang))
+                else:
+                    self.calculate4_docvecs(lang)
             
             # Calculate document vectors using document meta-data (titles)
             if lang in self.docvecs['meta']:
@@ -146,20 +158,25 @@ class MulLingVectors:
             self.docvecs['baa'][lang].append(sum(np.array(vec) for vec in d_tokens_vecs))
 
     def calculate2_docvecs(self, lang:str, multi=False):
-        # Calculate Inverse Document Frequency (IDF) on first pass
-        print('Calculating IDFs')
-        N = len(self.docs[lang])
-        dfs = dict()
-        for doc in self.docs[lang]:
-            d_tokens = processing.tokenize(lang,doc[1])
-            d_unique_tokens = list(set(d_tokens))
-            for token in d_unique_tokens:
-                if token in dfs:
-                    dfs[token] += 1
-                else:
-                    dfs[token] = 1
-        
-        self.idfs[lang] = dict(zip(dfs, map(lambda x : (math.log(N/x)), dfs.values())))
+
+        if 'idfs' in self.paths:
+            self.idfs = pickle.load( open(self.paths['idfs'], 'rb'))
+            print('Loaded IDFs')
+        else:
+            # Calculate Inverse Document Frequency (IDF) on first pass
+            print('Calculating IDFs')
+            N = len(self.docs[lang])
+            dfs = dict()
+            for doc in self.docs[lang]:
+                d_tokens = processing.tokenize(lang,doc[1])
+                d_unique_tokens = list(set(d_tokens))
+                for token in d_unique_tokens:
+                    if token in dfs:
+                        dfs[token] += 1
+                    else:
+                        dfs[token] = 1
+            
+            self.idfs[lang] = dict(zip(dfs, map(lambda x : (math.log(N/x)), dfs.values())))
 
         # Calculating BWE-Agg-IDF using weighted vector addition on second pass.
         print('Calculating document vectors')
@@ -203,6 +220,19 @@ class MulLingVectors:
         for doc in self.docs[lang]:
             text = doc[1].replace('\n', ' ')
             vec = LASER.get_vect(text, lang=lang)
+            if isinstance(vec, (list, tuple, np.ndarray)):
+                self.docvecs['lasers'][lang].append(vec)
+            else:
+                self.docs[lang].remove(doc)
+
+    def calculate4_docvecs(self, lang:str):
+        # Calculate document vectors using LASER Sentence Embeddings on article titles
+        print('Loading document vectors using LASER-meta')
+        self.docvecs['metalasers'][lang] = list()
+
+        for doc in self.docs[lang]:
+            text = doc[0].replace('\n', ' ')
+            vec = LASER.get_vect(text, lang=lang if lang != 'zh' else 'en')
             if isinstance(vec, (list, tuple, np.ndarray)):
                 self.docvecs['lasers'][lang].append(vec)
             else:
