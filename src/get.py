@@ -23,5 +23,5 @@ def _getarticle(self, tuple_):
 
 # Get readable results of enumerated titles from a query:
 def _getresults(self, query_results):
-    for cs, ai, lang in query_results:
-        print(self.docs[lang][ai][0])
+    for index, result in enumerate(query_results):
+        print('%i. %s' % (index+1, self.docs[result[2]][result[1]][0]))

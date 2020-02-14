@@ -188,7 +188,7 @@ def laser_query(self, q, lang, k):
 
     cs_rrl = [0 for _ in range(k)]          # Cosine Similarity Ranked Relevance List
     ai_rrl = [0 for _ in range(k)]          # Article Index Ranked Relevance List
-    for index, vec in enumerate(self.docvecs['lasers'][lang]):
+    for index, vec in enumerate(self.docvecs['laser'][lang]):
         r = np.dot( q_vecs, vec[0]) / ( np.linalg.norm(q_vecs) * np.linalg.norm(vec[0]) )
         m = 0
         while(m < k):
@@ -218,7 +218,7 @@ def laser_mulling_query(self, q, k, L=-1, normalize_top_L = False):
     else:
         sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
 
-def ensemble_query(self, ensemble, q, k, L=-1, normalize_top_L = False):
+def ensemble_query(self, ensemble, q, k, L=-1, normalize_top_L = True):
     if L == -1:
         L = k
     elif k> len(self.langs)*L:
@@ -261,3 +261,33 @@ def ensemble_query(self, ensemble, q, k, L=-1, normalize_top_L = False):
         return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:-k-1:-1]
     else:
         return sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:-k-1:-1]
+
+
+def monolingual_annoy_query(self, q, model, lang, k):
+    if model == 'laser' or model == 'metalaser':
+        q_vecs = LASER.get_vect(q)[0]
+    else:
+        q_vecs = processing.vectorize_lang(self, q, lang)
+    return list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+
+def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True):
+    if L == -1:
+        L = k
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    
+    if model == 'laser' or model == 'metalaser':
+        q_vecs = LASER.get_vect(q)[0]
+    else:
+        if multilingual:
+            q_vecs = processing.vectorize(self, q)
+        else:
+            q_vecs = processing.vectorize_lang(self, q, 'en')
+    results = list()
+    for lang in self.langs:
+        results += list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+        self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+    if normalize_top_L:
+        return sorted(results, key=lambda tuple_: get._getnormalizedtopLitem(self, tuple_))[:k]
+    else:
+        return sorted(results, key=lambda tuple_: get._getnormalizeditem(self,tuple_))[:k]
