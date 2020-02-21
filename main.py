@@ -52,12 +52,12 @@ class MulLingVectors:
 
         if self.method %2==0:
             self.paths = {
-                'docvecs_baa': 'pickle/docvecs_baa_new.pkl',
-                'docvecs_bai': 'pickle/docvecs_new.pkl',
-                'idfs': 'pickle/idfs_new.pkl',
-                'metadocvecs': 'pickle/metadocvecs_new.pkl',
-                'lasers': 'pickle/lasers_new.pkl',
-                'metalasers' : 'pickle/metalasers_new.pkl'
+                'docvecs_baa': 'dump/pickle/docvecs_baa_new.pkl',
+                'docvecs_bai': 'dump/pickle/docvecs_new.pkl',
+                'idfs': 'dump/pickle/idfs_new.pkl',
+                'metadocvecs': 'dump/pickle/metadocvecs_new.pkl',
+                'lasers': 'dump/pickle/lasers_new.pkl',
+                'metalasers' : 'dump/pickle/metalasers_new.pkl'
             }
             
             if 'docvecs_baa' in self.paths:
@@ -321,9 +321,9 @@ class MulLingVectorsAnnoy:
 
                 # Load Annoy Index
                 self.docvecs[model][lang] = AnnoyIndex(dim, 'angular')
-                if os.path.isfile('annoy/%s/%s%s.ann' % (lang, model, self.paths[model])):
-                    self.docvecs[model][lang].load('annoy/%s/%s%s.ann' % (lang, model, self.paths[model]))
-                    print('Loading document vectors from annoy/%s/%s%s.ann.' % (lang, model, self.paths[model]))
+                if os.path.isfile('dump/annoy/%s/%s%s.ann' % (lang, model, self.paths[model])):
+                    self.docvecs[model][lang].load('dump/annoy/%s/%s%s.ann' % (lang, model, self.paths[model]))
+                    print('Loading document vectors from dump/annoy/%s/%s%s.ann.' % (lang, model, self.paths[model]))
                 else:
                     print('Saved annoy index not found, calculating from scratch.')
                     self.calculate(model, lang)
@@ -372,7 +372,7 @@ class MulLingVectorsAnnoy:
 
 
         if model =='bai':
-            if os.path.isfile('pickle/idfs_new.pkl'):
+            if os.path.isfile('dump/pickle/idfs_new.pkl'):
                 # Load IDFs
                 self.idfs = pickle.load( open(self.paths['idfs'], 'rb'))
                 print('Loaded IDFs')
@@ -456,7 +456,7 @@ class MulLingVectorsAnnoy:
                 self.docvecs['metalasers'][lang].add_item(index, vecs)
 
         self.docvecs[model][lang].build(math.floor(math.log(len(self.docs[lang]))))
-        self.docvecs[model][lang].save('annoy/%s/%s%s.ann' % (lang, model, self.paths[model]))
+        self.docvecs[model][lang].save('dump/annoy/%s/%s%s.ann' % (lang, model, self.paths[model]))
 
 if __name__ == "__main__":
     from src import get, query, processing
