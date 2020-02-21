@@ -1,5 +1,5 @@
 import os.path
-import statistics
+from statistics import mean
 import functools
 import math
 from scipy.stats import friedmanchisquare
@@ -12,14 +12,19 @@ from . import processing, get, query
 from pkgs import LASER
 
 # Mean Square Cosine Similarity, only test for non KD-Tree queries.
-def _evaluate_precision(self, results):
-    return statistics.mean([(1 - (cs**2)/2)**2 for cs, ai, lang in results])**0.5
+def evaluate_precision(self, results, angular=True):
+    if angular:
+        return mean([(1 - (cs**2)/2)**2 for cs, ai, lang in results])**0.5
+    else:
+        return mean([(cs**2) for cs, ai, lang in results])**0.5
 
 # Half-L Recall
-def _evaluate_recall(self, results, q, k):
+def evaluate_recall(self, results, q, k, L=-1):
+    if L == -1:
+        L = k//4
     list1 = [(ai, lang) for cs, ai, lang in results]
-    list2 = [(ai, lang) for cs, ai, lang in query.mulling_annoy_query(self, q, 'meta', k=k)]
-    return len(set(list1).intersection(set(list2)))/len(list2)
+    list2 = [(ai, lang) for cs, ai, lang in query.mulling_annoy_query(self, q, 'bai', k=4*k, L=4*L)]
+    return len(set(list1).intersection(set(list2)))/len(list1)
 
 def cossim(v1, v2):
     return np.dot(v1, v2)/(np.linalg.norm(v1) * np.linalg.norm(v2))
@@ -118,27 +123,28 @@ class Evaluator:
     would be representative to how well each model has ranked the articles. We then take the mean
     ensemble preserve it.
     '''
-    def tabulate(self, ensemble=None):
+    def tabulate(self, ensemble=False):
         if not ensemble:
-            self.ensemble = []
+            self.weights = []
             for query_ in self.data:
                 f_data = self.data[query_].iloc[1:(len(self.methods)+1),1:-1].values.tolist()
                 p =friedmanchisquare(*f_data)[1]
                 ph_data = scikit_posthocs.posthoc_nemenyi_friedman(np.array(f_data).T)
                 ph_min = [math.sqrt(-1*np.prod(ph_data[i])) for i in range(len(ph_data[0]))]
-                ensemble = [n/sum(ph_min) for n in ph_min]
-                self.data[query_]['Non-parametric (Friedman, Nemenyi)'] = ['p=%.3f'%p] + ensemble
+                weights = [n/sum(ph_min) for n in ph_min]
+                self.data[query_]['Non-parametric (Friedman, Nemenyi)'] = ['p=%.6f'%p] + weights
                 self.table = self.table.append(self.data[query_])
-                if p>=0.05:
-                    self.ensemble.append(ensemble)
+                if p>=0.001:
+                    self.weights.append(weights)
             self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)']].set_index('Queries', append=True).swaplevel(0,1)
-            self.ensembles = np.asarray(self.ensemble).T.tolist()
+            self.ensembles = np.asarray(self.weights).T.tolist()
             self.print_results()
         else:
-            self.ensemble = []
+            self.weights = []
+            self.table = pd.DataFrame(columns=['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)'] + ['Non-parametric (Friedman, Nemenyi) (New)']).set_index('Queries')
             for query_ in self.data:
                 # Appending Ensemble model as new row to each query
-                results = [sum( a*b for a,b in zip(ensemble, c)) for c in np.array(self.data[query_].iloc[1:(len(self.methods)+1),1:-2].values.tolist()).T]
+                results = [sum( a*b for a,b in zip(self.ensemble, c)) for c in np.array(self.data[query_].iloc[1:(len(self.methods)+1),1:-2].values.tolist()).T]
                 new_row = pd.Series(dict(zip(self.data[query_].columns, ['Ensemble-model'] + results + [query_, '0'])))
                 self.data[query_] = self.data[query_].append(new_row, ignore_index=True)
 
@@ -146,19 +152,26 @@ class Evaluator:
                 p =friedmanchisquare(*f_data)[1]
                 ph_data = scikit_posthocs.posthoc_nemenyi_friedman(np.array(f_data).T)
                 ph_min = [math.sqrt(-1*np.prod(ph_data[i])) for i in range(len(ph_data[0]))]
-                ensemble = [n/sum(ph_min) for n in ph_min]
-                self.data[query_]['Non-parametric (Friedman, Nemenyi) (New)'] = ['p=%.3f'%p] + ensemble
+                weights = [n/sum(ph_min) for n in ph_min]
+                self.data[query_]['Non-parametric (Friedman, Nemenyi) (New)'] = ['p=%.6f'%p] + weights
                 self.table = self.table.append(self.data[query_])
-                if p>=0.05:
-                    self.ensemble.append(ensemble)
-            self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)']].set_index('Queries', append=True).swaplevel(0,1)
-            self.ensembles = np.asarray(self.ensemble).T.tolist()
-            self.print_results()
+                if p>=0.001:
+                    self.weights.append(weights)
+            self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)'] + ['Non-parametric (Friedman, Nemenyi) (New)']].set_index('Queries', append=True).swaplevel(0,1)
+            self.ensembles = np.asarray(self.weights).T.tolist()
+            self.print_results(ensemble=ensemble)
 
     # Print table of results and print ensemble 
-    def print_results(self):
+    def print_results(self, ensemble=False):
         display(self.table)
-        print('Ensemble is %.3fx of BAA, %.3fx of BAI, %.3fx of LASER and %.3fx of meta LASERs' % (statistics.mean(self.ensembles[0]),statistics.mean(self.ensembles[1]),statistics.mean(self.ensembles[2]),statistics.mean(self.ensemble[3])))
+        if not ensemble:
+            self.ensemble = [mean(self.ensembles[i])*1.5-0.125 for i in range(4)]
+            print('Using %i valid results, the calculated ensemble is %.3fx of BAA, %.3fx of BAI, %.3fx of LASER and %.3fx of meta LASERs' % (len(self.ensembles[0]), self.ensemble[0], self.ensemble[1], self.ensemble[2], self.ensemble[3]))
+        else:
+            self.ensemble = [mean(self.ensembles[i])*1.5-0.125 for i in range(5)]
+            print('Using %i valid results, the new weights are %.3fx of BAA, %.3fx of BAI, %.3fx of LASER, %.3fx of meta LASERs and %.3f of the ensemble model' % (len(self.ensembles[0]), self.ensemble[0], self.ensemble[1], self.ensemble[2], self.ensemble[3], self.ensemble[4]))
+            if max(self.ensemble) == self.ensemble[4]:
+                print('Ensemble model is valid.')
 
     # Export the output table to csv
     def export_to_csv(self, outpath=''):
