@@ -46,6 +46,18 @@ def all(self, query_results):
         print('\033[1m%i. %s\033[0m' % (index+1, self.docs[result[2]][result[1]][0]))
         print(self.docs[result[2]][result[1]][1][:200] + '...\n')
 
+# Get readable results of enumerated titles from a query:
+def jsonresults(self, query_results):
+    return ['%i. %s<br/>' % (index+1, self.docs[result[2]][result[1]][0]) for index, result in enumerate(query_results)]
+
+# Get readable results of enumerated titles from a query:
+def jsonscoredresults(self, query_results):
+    return ['%i. %f %s<br/>' % (index+1, result[0], self.docs[result[2]][result[1]][0]) for index, result in enumerate(query_results)]
+
+# Get readable results of enumerated titles and articles from a query:
+def jsonall(self, query_results):
+    return ['<h3>%i. %s</h3>' % (index+1, self.docs[result[2]][result[1]][0]) + self.docs[result[2]][result[1]][1][:400] + '...' for index, result in enumerate(query_results)]
+
 # Get accuracy using evaluate.py
 def accuracy(self, results, q, k, angular=True):
     precision = evaluate.evaluate_precision(self, results, angular=angular)
