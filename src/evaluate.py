@@ -31,7 +31,7 @@ def cossim(v1, v2):
 
 # Pipeline evaluator
 class Evaluator:
-    def __init__(self, inpath , k, L, MulLingObject, methods=[1,2,3,4]):
+    def __init__(self, inpath , k, L, MulLingObject, methods=[1,2,3,4,5,6]):
         if L == -1:
             L = k
         elif k> len(MulLingObject.langs)*L:
@@ -48,7 +48,7 @@ class Evaluator:
                 self.n_queries = f.readline()[:-1]
                 for line in f:
                     self.queries.append(line[:-1])
-        method_list = ['baa','bai','laser','metalaser']
+        method_list = ['baa','bai','laser','metalaser','senlaser','senbai']
         self.methods = list(map(lambda x: method_list[x-1], methods))
         self.table = pd.DataFrame(columns=['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(k)] + ['Non-parametric (Friedman, Nemenyi)']).set_index('Queries')
 
@@ -81,21 +81,31 @@ class Evaluator:
             for index, method_ in enumerate(self.methods):
                 if method_ == 'baa':
                     name = 'BWE-Agg-Add'
-                    vec = smallvects[index_]
                 elif method_ == 'bai':
                     name = 'BWE-Agg-IDF'
-                    vec = smallvects[index_]
                 elif method_ == 'laser':
                     name = 'LASER'
-                    vec = bigvects[index_]
                 elif method_ == 'metalaser':
                     name = 'LASER-meta'
-                    vec = bigvects[index_]
+                elif method_ == 'senlaser':
+                    name = 'LASER-sentences'
+                elif method_ == 'senbai':
+                    name = 'BWE-Agg-IDF-sentence'
+                
+                vec = bigvects[index_] if 'laser' in method_ else smallvects[index_]
                 results = list()
                 for i in range(self.k):
                     ai, lang = self.data[query_]['Article{}/Ranking'.format(i+1)][0]
-                    d_vecs = MulLingObject.docvecs[method_][lang].get_item_vector(ai)
-                    results.append(cossim(vec, d_vecs))
+                    if 'sen' not in method_:
+                        d_vecs = MulLingObject.docvecs[method_][lang].get_item_vector(ai)
+                        results.append(cossim(vec, d_vecs))
+                    else:
+                        sis = [MulLingObject.s2d[method_][lang].index(ai)]
+                        while MulLingObject.s2d[method_][lang][sis[-1]+1] == ai:
+                            sis.append(sis[-1]+1)
+                            if sis[-1]+1 == len(MulLingObject.s2d[method_][lang]):
+                                break
+                        results.append(max([cossim(vec, MulLingObject.docvecs[method_][lang].get_item_vector(si)) for si in sis]))
                 
                 # Appending cosine similarities to the dataframe
                 new_row = pd.Series(dict(zip(self.data[query_].columns, [name] + results)))
@@ -124,54 +134,48 @@ class Evaluator:
     ensemble preserve it.
     '''
     def tabulate(self, ensemble=False):
-        if not ensemble:
-            self.weights = []
-            for query_ in self.data:
-                f_data = self.data[query_].iloc[1:(len(self.methods)+1),1:-1].values.tolist()
-                p =friedmanchisquare(*f_data)[1]
-                ph_data = scikit_posthocs.posthoc_nemenyi_friedman(np.array(f_data).T)
-                ph_min = [math.sqrt(-1*np.prod(ph_data[i])) for i in range(len(ph_data[0]))]
-                weights = [n/sum(ph_min) for n in ph_min]
-                self.data[query_]['Non-parametric (Friedman, Nemenyi)'] = ['p=%.6f'%p] + weights
-                self.table = self.table.append(self.data[query_])
-                if p>=0.001:
-                    self.weights.append(weights)
-            self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)']].set_index('Queries', append=True).swaplevel(0,1)
-            self.ensembles = np.asarray(self.weights).T.tolist()
-            self.print_results()
-        else:
-            self.weights = []
-            self.table = pd.DataFrame(columns=['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)'] + ['Non-parametric (Friedman, Nemenyi) (New)']).set_index('Queries')
-            for query_ in self.data:
-                # Appending Ensemble model as new row to each query
+        offset = 2 if ensemble else 1
+        column_name = 'Non-parametric (Friedman, Nemenyi) (New)' if ensemble else 'Non-parametric (Friedman, Nemenyi)'
+        self.weights = []
+        for query_ in self.data:
+            if ensemble:
+                #  Appending Ensemble model as new row to each query
                 results = [sum( a*b for a,b in zip(self.ensemble, c)) for c in np.array(self.data[query_].iloc[1:(len(self.methods)+1),1:-2].values.tolist()).T]
                 new_row = pd.Series(dict(zip(self.data[query_].columns, ['Ensemble-model'] + results + [query_, '0'])))
                 self.data[query_] = self.data[query_].append(new_row, ignore_index=True)
 
-                f_data = self.data[query_].iloc[1:(len(self.methods)+2),1:-2].values.tolist()
-                p =friedmanchisquare(*f_data)[1]
-                ph_data = scikit_posthocs.posthoc_nemenyi_friedman(np.array(f_data).T)
-                ph_min = [math.sqrt(-1*np.prod(ph_data[i])) for i in range(len(ph_data[0]))]
-                weights = [n/sum(ph_min) for n in ph_min]
-                self.data[query_]['Non-parametric (Friedman, Nemenyi) (New)'] = ['p=%.6f'%p] + weights
-                self.table = self.table.append(self.data[query_])
-                if p>=0.001:
-                    self.weights.append(weights)
+            f_data = self.data[query_].iloc[1:(len(self.methods)+offset),1:-1*offset].values.tolist()
+            p =friedmanchisquare(*f_data)[1]
+            ph_data = scikit_posthocs.posthoc_nemenyi_friedman(np.array(f_data).T)
+            #ph_min = [math.sqrt(-1*np.prod(ph_data[i])) for i in range(len(ph_data[0]))]
+            ph_min = [max(ph_data[i]) for i in range(len(ph_data[0]))]
+            weights = [n/sum(ph_min) for n in ph_min]
+            self.data[query_][column_name] = ['p=%f'%p] + weights
+            self.table = self.table.append(self.data[query_])
+            self.weights.append(weights)
+        if ensemble:
             self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)'] + ['Non-parametric (Friedman, Nemenyi) (New)']].set_index('Queries', append=True).swaplevel(0,1)
-            self.ensembles = np.asarray(self.weights).T.tolist()
-            self.print_results(ensemble=ensemble)
+        else:
+            self.table = self.table[['Queries', 'Model'] + ['Article{}/Ranking'.format(i+1) for i in range(self.k)] + ['Non-parametric (Friedman, Nemenyi)']].set_index('Queries', append=True).swaplevel(0,1)
+        self.ensembles = np.asarray(self.weights).T.tolist()
+        return self.print_results()
 
     # Print table of results and print ensemble 
-    def print_results(self, ensemble=False):
-        display(self.table)
+    def print_results(self, ensemble=False, table=True):
+        if table:
+            display(self.table)
         if not ensemble:
-            self.ensemble = [mean(self.ensembles[i])*1.5-0.125 for i in range(4)]
-            print('Using %i valid results, the calculated ensemble is %.3fx of BAA, %.3fx of BAI, %.3fx of LASER and %.3fx of meta LASERs' % (len(self.ensembles[0]), self.ensemble[0], self.ensemble[1], self.ensemble[2], self.ensemble[3]))
+            self.ensemble = [mean(self.ensembles[i]) for i in range(len(self.methods))]
+            output = tuple([len(self.ensembles[0])] + [self.ensemble[i] for i in range(len(self.methods))])
+            #print('Using %i valid results, the calculated ensemble is %.3fx of BAA, %.3fx of BAI, %.3fx of LASER, %.3fx of meta LASERs, %.3fx of sentence LASER and %.3f of sen BAI.' % output)
+            return output
         else:
-            self.ensemble = [mean(self.ensembles[i])*1.5-0.125 for i in range(5)]
-            print('Using %i valid results, the new weights are %.3fx of BAA, %.3fx of BAI, %.3fx of LASER, %.3fx of meta LASERs and %.3f of the ensemble model' % (len(self.ensembles[0]), self.ensemble[0], self.ensemble[1], self.ensemble[2], self.ensemble[3], self.ensemble[4]))
-            if max(self.ensemble) == self.ensemble[4]:
+            self.ensemble = [mean(self.ensembles[i]) for i in range(len(self.methods)+1)]
+            output = tuple([len(self.ensembles[0])] + [self.ensemble[i] for i in range(len(self.methods)+1)])
+            #print('Using %i valid results, the calculated ensemble is %.3fx of BAA, %.3fx of BAI, %.3fx of LASER, %.3fx of meta LASERs, %.3fx of sentence LASER, %.3f of sen BAI and %.3f of the ensemble model' % output)
+            if max(self.ensemble) == self.ensemble[-1]:
                 print('Ensemble model is valid.')
+            return output
 
     # Export the output table to csv
     def export_to_csv(self, outpath=''):

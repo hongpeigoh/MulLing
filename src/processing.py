@@ -1,6 +1,7 @@
 import numpy as np
 import string
 import codecs
+import re
 import spacy
 import jieba as nlp_zh
 import malaya as nlp_ms
@@ -84,4 +85,6 @@ def vectorize_lang(self, input_, lang):
             #raise KeyError('{} cannot be found in dictionary'.format(token))
     return sum(np.array(vec) for vec in tokens_vecs)
 
-    
+def zh_sent_tokenize(paragraph):
+    for sent in re.findall(u'[^!?。\.\!\?]+[!?。\.\!\?]?', paragraph, flags=re.U):
+        yield sent

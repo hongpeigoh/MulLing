@@ -2,6 +2,7 @@ import numpy as np
 import statistics
 from . import processing, get
 from pkgs import LASER
+from sklearn.cluster import MeanShift
 
 '''
 Input Monolingual Query, searched using brute force on documents in query language.
@@ -265,24 +266,44 @@ def ensemble_query(self, ensemble, q, k, lang='en', L=-1, normalize_top_L = True
         return sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:-k-1:-1]
 
 
-def monolingual_annoy_query(self, q, model, lang, k):
+def monolingual_annoy_query(self, q, model, lang, k, clustering=False):
     # Vectorize query
     q_vecs = LASER.get_vect(q)[0] if 'laser' in model else processing.vectorize_lang(self, q, lang) 
     
     # Find and return results in ranked list
-    if model == 'senlaser':
-        return list((cs, self.s2d[model][lang][si], lang) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+    if not clustering:
+        if 'sen' in model:
+            for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
+                yield (cs, self.s2d[model][lang][si], lang, si)
+        else:
+            for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
+                yield (cs, ai, lang, -1)
     else:
-        return list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        if 'sen' in model:
+            tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True)))) if 'sen' in model else list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        else:
+            tmp = list([cs, ai, lang, -1] for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        vecs = np.array([self.docvecs[model][result[2]].get_item_vector(result[1]) for result in tmp])
+        clustering = MeanShift().fit(vecs)
+        for i in range(k):
+            yield tuple(tmp[i] + [clustering.labels_[i]])
+            
+    
 
-def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True, lang_='en'):
+def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True, lang_='en', olangs= None, clustering=False):
     if L == -1:
         L = k
     elif k> len(self.langs)*L:
         raise ValueError('The number of search results cannot be displayed as L is too small!')
+    if olangs == None:
+        olangs = self.langs
+    else:
+        for lang in olangs:
+            if lang not in self.langs:
+                raise KeyError('The specified output language is not accepted!')
     
     # Vectorize query
-    if model == 'laser' or model == 'metalaser':
+    if 'laser' in model:
         q_vecs = LASER.get_vect(q)[0]
     else:
         if multilingual:
@@ -292,11 +313,11 @@ def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multiling
 
     # Find results
     results = list()
-    for lang in self.langs:
-        if model == 'senlaser':
-            results += list((cs, self.s2d[model][lang][si], lang) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+    for lang in olangs:
+        if 'sen' in model:
+            results += list((cs, self.s2d[model][lang][si], lang, si) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
         else:
-            results += list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+            results += list((cs, ai, lang, -1) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
         self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
 
     # Return results in ranked list

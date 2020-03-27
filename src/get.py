@@ -1,7 +1,8 @@
 import statistics
 import math
 import numpy as np
-from . import evaluate
+from nltk.tokenize import sent_tokenize
+from . import evaluate, processing
 
 # Get cosine similarity
 def cosine_sim(v1, v2):
@@ -46,13 +47,30 @@ def all(self, query_results):
         print('\033[1m%i. %s\033[0m' % (index+1, self.docs[result[2]][result[1]][0]))
         print(self.docs[result[2]][result[1]][1][:200] + '...\n')
 
-# Get readable results of enumerated titles from a query:
-def jsonresults(self, query_results):
-    return ['%i. %s<br/>' % (index+1, self.docs[result[2]][result[1]][0]) for index, result in enumerate(query_results)]
+# Get readable results for sentence model:
+def sentence(self, result, model):
+    sennum = result[3] - self.s2d[model][result[2]].index(result[1])
+    if result[2] == 'zh':
+        return list(processing.zh_sent_tokenize(self.docs[result[2]][result[1]][1]))[sennum]
+    else:
+        return sent_tokenize(self.docs[result[2]][result[1]][1])[sennum]
 
-# Get readable results of enumerated titles from a query:
-def jsonscoredresults(self, query_results):
-    return ['%i. %f %s<br/>' % (index+1, result[0], self.docs[result[2]][result[1]][0]) for index, result in enumerate(query_results)]
+# Get parsed results for json flask
+def json(self, query_results, model):
+    for index, result in enumerate(query_results):
+        rank = str(index+1)
+        score = str(result[0])
+        clustering = str(result[3])
+        title = self.docs[result[2]][result[1]][0]
+        text = self.docs[result[2]][result[1]][1]
+        if result[3] >= 0:
+            try:
+                best_sen = sentence(self, result, model)
+                yield ('\t'.join([rank, score, clustering, title, text, best_sen]))
+            except:
+                yield ('\t'.join([rank, score, clustering, title, text]))
+        else:
+            yield ('\t'.join([rank, score, clustering, title, text]))
 
 # Get readable results of enumerated titles and articles from a query:
 def jsonall(self, query_results):
