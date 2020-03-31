@@ -1,0 +1,217 @@
+/* Text and other rendered Text objects*/
+h1 {
+  color:rgb(0,45,135);
+  font-weight: bold;
+  padding-bottom: 2vh;
+}
+h2 {
+  padding-top: 0.3vh;
+  padding-bottom: 0.3vh;
+  font-weight: 600;
+}
+h3 {
+  margin-bottom: 0.3vh;
+}
+h4 {
+  margin-bottom: 0.4vh;
+}
+.small {
+  color: white;
+}
+p {
+  padding: 1vh;
+}
+
+/* Webpage Containers */
+.app-container {
+  padding: 0px;
+  -webkit-transition: transform 0.5s; 
+  -moz-transition: transform 0.5s; 
+  -ms-transition: transform 0.5s;
+  -o-transition: transform 0.5s;
+  transition: transform 0.5s;
+  transform: none;
+  border-radius: 0px;
+}
+html{
+  overflow-x: hidden;
+}
+*, *::before, *::after {
+  box-sizing: inherit;
+  padding: 0;
+  margin: 0;
+}
+.bootstrap-wrapper {
+  opacity: 100%;
+  background-size: cover;
+  background-color: rgb(0,45,135);
+  background-image: url('images/bg2.jpg');
+  background-attachment: fixed;
+  min-height: 90.4vh;
+  margin-top: 1px;
+}
+
+/* Individual Sizing Containers */
+.container .row div {
+  outline: solid 0px black;
+  margin-left: 0vw;
+  margin-right: 0vw;
+  padding: 1vw 1vh;
+}
+.container .col div {
+  padding: 0vh;
+}
+.right {
+  align-items: right;
+  align-content: right;
+  text-align: right;
+  display: inline-block;
+  width: 100%;
+}
+.center {
+  align-items: center;
+  align-content: center;
+  text-align: center;
+  display: block;
+  width: 100%;
+}
+.block {
+  height: 10vh;
+}
+
+/* Home */
+.input-form {
+  background-color: rgb(255,255,255);
+  padding: 1vh;
+  padding-top: 0.5vh;
+  padding-bottom: 0.5vh;
+  margin-bottom: 1.5vh;
+  border-radius: 1vh;
+  border: solid 1px grey;
+  width: 88%;
+}
+.input-bar {
+  padding: 2vh;
+  padding-top: 1vh;
+  padding-bottom: 0.5vh;
+  border-radius: 1vh;
+  border-width: 0px;
+  width: 100%;
+  font-size: 16px;
+}
+.input-bar:focus {
+  outline-width: 0;
+}
+#input-text-area {
+  width: calc(100% - 84px);
+}
+#searchbar {
+  padding: 5vw;
+  padding-bottom: 2.5vw;
+  border-radius: 3vw;
+  background-color: rgba(255, 255, 255, 0.6);
+  filter:progid:DXImageTransform.Microsoft.gradient(startColorstr=#4cFF0000,endColorstr=#4cFF0000);
+  transform: none;
+  -webkit-transition:  padding-top 0.5s, transform 0.5s;
+  -moz-transition:  padding-top 0.5s, transform 0.5s;
+  -ms-transition:  padding-top 0.5s, transform 0.5s;
+  -o-transition:  padding-top 0.5s, transform 0.5s;
+  transition:  padding-top 0.5s, transform 0.5s;
+}
+.k-radio {
+  margin: 0.3vh;
+}
+label {
+  font-size: 1em;
+}
+#collapsible {
+  -webkit-transition: max-height 0.5s; 
+  -moz-transition: max-height 0.5s; 
+  -ms-transition: max-height 0.5s;
+  -o-transition: max-height 0.5s;
+  transition: max-height 0.5s;
+  overflow: hidden;
+  max-height: 400px;
+}
+#input-to-results {
+  margin-top: 2vh;
+  padding: 0vh 5vh;
+}
+
+/*Result*/
+.result a{
+  text-decoration: none;
+  color: inherit;
+}
+.result a:hover{
+  text-decoration: underline;
+}
+.result h2{
+  color: rgb(0, 45, 135);
+  font-weight: normal;
+}
+.result h5{
+  color: rgb(0, 135, 0);
+  font-weight: normal;
+}
+.result p{
+  padding-left: 0px;
+}
+.result{
+  padding: 5px;
+  display: block;
+  width: 51%;
+  border: solid 1px rgba(255, 255, 255,0);
+  margin: 0px;
+  color: rgb(55, 55, 55);
+}
+.result:hover{
+  border: solid 1px rgba(155,155,155,0.4);
+}
+
+
+/* About */
+.textcontent {
+  border-radius: 3vh;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 4vh;
+}
+pre {
+  background-color: rgba(255, 255, 255, 0.95);
+  margin: 2vh;
+  padding: 3vh;
+  outline: solid 1px black;
+}
+code {
+  background-color: rgb(255, 255, 255, 0.95);
+  padding-left: 0.5vw;
+  padding-right: 0.5vw;
+}
+.about li {
+  padding-left: 1vw;
+  padding-bottom: 0.3vh;
+  margin-left: 2vw
+}
+
+/* Navigatior bar */
+.site-footer{
+  position: sticky;
+  margin: 0;
+  border: 0;
+  bottom: 0vh;
+  background-color: rgb(0,45,135);
+  color: white;
+  height: 10vh;
+}
+.site-footer a{
+  color: white;
+  text-decoration: none; 
+}
+.site-footer .row div{
+  padding-top: 0.5vh;
+  padding-bottom: 0.5vh;
+}
+.site-footer .site-container{
+  padding-left: 0;
+  padding-right:0;
+}
