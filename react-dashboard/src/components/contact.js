@@ -32,9 +32,9 @@ class Contact extends Component {
               <article style={{padding: "10px"}}>
                 <h2>Creator: Goh Hong Pei</h2>
                 <ul>
-                  <li><strong>Github:</strong> github.com/hongpeigoh</li>
-                  <li><strong>E-mail:</strong> hong_pei_99@hotmail.com</li>
-                  <li><strong>Facebook:</strong> fb.com/hongpeigoh</li>
+                  <li><strong>Github:</strong> <a href="https://www.github.com/hongpeigoh">github.com/hongpeigoh</a></li>
+                  <li><strong>E-mail:</strong> <a href="mailto:hong_pei_99@hotmail.com">hong_pei_99@hotmail.com</a></li>
+                  <li><strong>Facebook:</strong> <a href="https://www.facebook.com/hongpeigoh">fb.com/hongpeigoh</a></li>
                 </ul>
                 <h2>Mentor: Ivan</h2>
                 <h2>Technical Mentor: Avery Khoo</h2>

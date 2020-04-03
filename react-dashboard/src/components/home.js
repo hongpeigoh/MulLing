@@ -6,22 +6,17 @@ import { DropDownList } from '@progress/kendo-react-dropdowns';
 import Loading from './widget.js'
 
 class Home extends Component{
-  componentDidMount() {
-    document.getElementById('app-container').style.transform = "none";
-    document.getElementById('app-container').style.maxWidth= "1140px";
-  }
   render() {
     return (
       <div className='home'>
-        <div className="row block"/>
-        <div className="row block"/>
-        <div className="row" id="searchbar">
+        <div className="row" id="block-20"/>
+        <div className="row" id="searchbox">
           <div className="col">
-            <div className="row" id="refresh-div" />
             <div className="row">
               <h1>Multilingual Information Retrieval (MulLing)</h1>
             </div>
             <Form/>
+            <div className="row" id="refresh-div" />
             <div className="row" id="input-to-results" />
             </div>
         </div>
@@ -37,12 +32,8 @@ class Refresh extends Component{
   }
 
   handleReload = e => {
-    document.getElementById('searchbar').style.transform = "none";
-    document.getElementById('searchbar').style.backgroundColor= "rgba(255,255,255,0.6)";
-    document.getElementById('searchbar').style.paddingTop= "5vw";
-    document.getElementById('searchbar').style.borderRadius= "3vw";
-    document.getElementById('app-container').style.transform = "none";
-    document.getElementById('app-container').style.maxWidth= "1140px";
+    window.anim_searchbox.reverse();
+    window.anim_blockcollapse.reverse();
 
     ReactDOM.unmountComponentAtNode(document.getElementById("input-to-results"));
     ReactDOM.render('', document.getElementById("refresh-div"));
@@ -50,7 +41,7 @@ class Refresh extends Component{
 
   render() {
     return(
-      <span className="right">
+      <span>
         <Button onClick={this.handleReload}>Clear Results</Button>
       </span>
     )
@@ -63,7 +54,6 @@ class Form extends Component {
     this.textInput = React.createRef();
     this.handleChange = this.handleChange.bind(this);
     this.handleCheckbox = this.handleCheckbox.bind(this);
-    this.handleNumericTextBox = this.handleNumericTextBox.bind(this)
     this.handleSubmit = this.handleSubmit.bind(this);
     this.toggleFilter = this.toggleFilter.bind(this);
     this.state = {
@@ -84,20 +74,30 @@ class Form extends Component {
     this.modelnames = ["Vector Addition Text", "Vector Addition Title", "TF-IDF Text", "TF-IDF Sentences", "Bi-LSTM Text", "Bi-LSTM Title", "Bi-LSTM Sentences"]
   }
 
+  componentDidUpdate(prevState) {
+    for (const key in this.state) {
+      if (this.state.key !== prevState.key) {
+        this.setState({key: this.state.key});
+      }
+    }
+  }
+
   handleSubmit = e => {
     e.preventDefault();
-    
-    var monolingual = '';
-    var suffix = '';
-    if (this.state.monolingual) {
-      monolingual = 'mono'
-    } else {
-      monolingual = 'multi'
-      suffix = '&normalize=' + String(this.state.normalize) + '&oen=' + String(this.state.oen) + '&ozh=' + String(this.state.ozh) + '&oms=' + String(this.state.oms) + '&ota=' + String(this.state.ota)
-    }
-    
+
+    const monolingual = ( this.state.monolingual ? 'mono' : 'multi');
+    const suffix = (
+      this.state.monolingual ? '' :
+      '&normalize=' + 
+        String(this.state.normalize) + 
+        '&oen=' + String(this.state.oen) + 
+        '&ozh=' + String(this.state.ozh) + 
+        '&oms=' + String(this.state.oms) + 
+        '&ota=' + String(this.state.ota) );
     const encodedquery = encodeURIComponent(this.textInput.current.value)
     const queryaddress = "http://192.168.137.217:5050/query_" + monolingual + "?q="+ encodedquery + "&model=" + this.state.model + "&lang=" + this.state.lang + "&k=" + this.state.k + suffix
+
+    console.log(queryaddress);
 
     // Styling
     ReactDOM.render(<Refresh/>, document.getElementById("refresh-div"));
@@ -106,13 +106,18 @@ class Form extends Component {
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {      
       if (xhttp.readyState === 3 && xhttp.status === 200) {
-        if (document.getElementById('searchbar').style.transform === "" | document.getElementById('searchbar').style.transform === "none") {
-          document.getElementById('searchbar').style.transform = "translate3d(0,-20vh,0)";
-          document.getElementById('searchbar').style.backgroundColor= "rgb(255,255,255)";
-          document.getElementById('searchbar').style.paddingTop= "0px";
-          document.getElementById('searchbar').style.borderRadius= "0px";
-          document.getElementById('app-container').style.transform = "scale3d(calc(100vw/1140px), 0, 0)";
-          document.getElementById('app-container').style.maxWidth= "none";
+        if (document.getElementById('searchbox').style.transform === "" | document.getElementById('searchbox').style.transform === "none") {
+          window.anim = { fill: 'forwards', duration: 300 };
+          window.anim_blockcollapse = document.getElementById('block-20').animate(
+            [
+              {height: '10vh'},
+              {height: '0vh'}
+            ], window.anim);
+          window.anim_searchbox = document.getElementById('searchbox').animate(
+            [
+              {backgroundColor: 'rgba(255,255,255,0.6)', paddingTop: '5vw', borderRadius: '3vw', width: 'auto', transform: 'none', marginLeft: '0vw'},
+              {backgroundColor: 'rgba(255,255,255,1)', paddingTop: '0', borderRadius: '0', width: '105vw', transform: 'translate3d(-20vw,0,0)', marginLeft: '5vw'}
+            ], window.anim);
         }
       } else if(xhttp.readyState === 4 && xhttp.status === 200){
         // Add Results
@@ -135,7 +140,7 @@ class Form extends Component {
         }
         ReactDOM.render(Children, document.getElementById('input-to-results'));
       } else if(xhttp.readyState === 4 && xhttp.status === 500){
-        ReactDOM.render(<ErrorSnippet/>, document.getElementById('input-to-results'));
+        ReactDOM.render(<ErrorSnippet status={xhttp.status}/>, document.getElementById('input-to-results'));
       }
     };
     xhttp.open("GET", queryaddress , true);
@@ -169,9 +174,6 @@ class Form extends Component {
       });
     }
   }
-  handleNumericTextBox(e) {
-    this.setState({k: e.value})
-  }
   itemRender = (li, itemProps) => {
     const index = itemProps.index;
     const itemChildren = <span>{this.modelnames[index]} ({li.props.children})</span>;
@@ -201,7 +203,10 @@ class Form extends Component {
         <form className="input-form" onSubmit={this.handleSubmit}>
           <div className="row">
             <span id="input-text-area">
-              <input className="input-bar" type="text" placeholder="Search..." ref={this.textInput}/>
+              <input id="input-text-field" className="input-bar" type="text" placeholder="Search..." ref={this.textInput}/>
+            </span>
+            <span className="right" style={{width:"36px"}}>
+              <Button type="button" icon="close" look="bare" onClick={()=>{document.getElementById("input-text-field").value = ''}}/>
             </span>
             <span className="right" style={{width:"48px"}}>
               <Button type="button" style={{padding:"10px 0px 10px 16px"}} icon="filter" onClick={this.toggleFilter} look="bare">{ this.state.isCardView ? <span className="k-icon k-i-arrow-chevron-right" /> : <span className="k-icon k-i-arrow-chevron-down" />}</Button>
@@ -257,12 +262,11 @@ class Form extends Component {
                   defaultValue = {this.models[2]}
                   itemRender = {this.itemRender}
                   valueRender = {this.valueRender}
-                  required = {true}
                 />
               </div>
               <div className="col-6 col-md-12 col-xl-6">
                 <h4>Number of Results</h4>
-                <NumericTextBox value={this.state.k} onChange={this.handleNumericTextBox} max={1000} min ={1} width="min(17vw,140px)"/><br/>
+                <NumericTextBox value={this.state.k} onChange={(e)=>this.setState({k: e.value})} max={1000} min ={1} width="140px"/><br/>
                 <Checkbox onChange={this.handleCheckbox} label={'Multilingual Results'}/><br/>
                 <Checkbox disabled={this.state.disabled} checked={this.state.normalize} onChange={(e) => this.setState({normalize: !this.state.normalize})} label={'Normalize Results'}/>
               </div>
@@ -277,40 +281,57 @@ class Form extends Component {
 function Snippet(props) {
   const toggletext =
   (props.fields.bestsentence == null
-    ? [( props.fields.article.length > 300
-        ? props.fields.article.substring(0,300) + ' ...'
+    ? [( props.fields.article.length > 275
+        ? props.fields.article.substring(0,275) + ' ...'
         : props.fields.article ),
       props.fields.article.replace(/\n/g,"<br/><br/>")]
     : ['<b>Closest Sentence: </b>'+ props.fields.bestsentence,
     props.fields.article.replace(props.fields.bestsentence, '<b>'+props.fields.bestsentence+'</b>').replace(/\n/g,"<br/><br/>")] );
   const [display, setDisplay] = useState(0);
+  const [isShown, setIsShown] = useState(false);
+  const ddg_link = "https://duckduckgo.com/?q=!ducky+" + encodeURIComponent(props.fields.title)
   
   useEffect(() => {
     var changeResult = document.getElementById("search-result-" + props.fields.rank);
     changeResult.innerHTML = '<p>' + changeResult.innerText + '</p>';
-  });
+  }, [display, props.fields.rank]);
 
   return(
-    <span className="result">
-      <h2><a target="_blank" rel="noopener noreferrer" href={"https://duckduckgo.com/?q=!ducky+" + encodeURIComponent(props.fields.title)}>{props.fields.title}</a></h2>
+    <span className="result" onMouseEnter={() => setIsShown(true)} onMouseLeave={() => setIsShown(false)}>
       <div className="row">
-        <h5><a target="_blank" rel="noopener noreferrer" href={"https://duckduckgo.com/?q=!ducky+" + encodeURIComponent(props.fields.title)}>{"https://duckduckgo.com/?q=!ducky+" + encodeURIComponent(props.fields.title)}</a></h5>
+        <h2><a
+          target="_blank"
+          rel="noopener noreferrer"
+          href={ddg_link}>
+          {props.fields.title}</a></h2>
       </div>
-      <div className="row" id={"search-result-" + props.fields.rank}>
+      <div className="row">
+        <h5><a
+          target="_blank"
+          rel="noopener noreferrer"
+          href={ddg_link}>
+          {(ddg_link.length >= 90 ? ddg_link.substring(0,90) + '...' : ddg_link)}</a></h5>
+      </div>
+      <div className="row search-result" id={"search-result-" + props.fields.rank} onClick={()=>setDisplay(1-display)}>
         {toggletext[display]}
       </div>
       <div className="row">
         <small>{props.fields.related}</small>
       </div>
-      <div className="row">
-        {(toggletext[0]===toggletext[1] ? '' : <Button onClick={()=>setDisplay(1-display)} look="bare" >See {(display===0 ? 'More' : 'Less')}</Button>)}
-      </div>
+      {isShown ? (
+        <div className="row">
+          {(toggletext[0]===toggletext[1] ? '' : <Button icon="hyperlink-open" onClick={()=>setDisplay(1-display)} look="bare" >{(display===0 ? 'Expand' : 'Collapse')} Article</Button>)}
+        </div>
+      ) : (
+        <div className="row" style={{height: "36px"}}/>
+      )}
+      
     </span>
   )
 }
 
 const PreSnippet = () => (
-  <span className="warning" style={{width:"51%"}}>
+  <span className="warning" style={{width:"100%"}}>
     <p style={{color:"red"}}>Warning: Links lead out using DuckDuckGo's proprietary I'm Feeling Lucky. Click at your own risk!</p>
   </span>
 )
@@ -318,8 +339,8 @@ const PreSnippet = () => (
 function ErrorSnippet(props) {
   return(
     <div className="row">
-      <h2 style={{color:"red"}}>{(props.status === 500 ? 'Server Error' : 'Error '+ props.status)}</h2>
-      <p style={{color:"red"}}>{(props.status === 500 ? 'Query could not be parsed. Please try again. Avoid using stopwords and out-of-dictionary words.': 'Idk, just try again  maybe')}</p>
+      <h2 style={{color:"red"}}>{(props.status === 500 ? 'Server Error' : 'Query Input Error'+ props.status)}</h2>
+      <p style={{color:"red"}}>{(props.status === 500 ? 'Query could not be parsed. Please try again. Avoid using stopwords and out-of-dictionary words. Did you fill in an empty query?': 'Query could not be identified. Did you choose the correct input language?')}</p>
     </div>
   )
 }
