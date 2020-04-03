@@ -1,5 +1,5 @@
-#from mulling import MulLingVectorsAnnoy
-#from src import get, processing, query
+from mulling import MulLingVectorsAnnoy
+from src import get, processing, query
 
 import os.path
 import math
@@ -111,10 +111,9 @@ def multiappquery():
     )
 
 if __name__ == "__main__":
-    methods = ['baa','bai','meta','laser','metalaser','senlaser','senbai']
-    paths = [1 for method in methods]
-    #langs = ['en','zh','ms','ta']
-    langs = []
+    models = ['baa','bai','meta','laser','metalaser','senlaser','senbai']
+    path = './dump'
+    langs = ['en','zh','ms','ta']
 
-    #app_object = MulLingVectorsAnnoy(methods=methods, paths=paths, langs=langs)
+    app_object = MulLingVectorsAnnoy(models=models, path=path, langs=langs)
     app.run(port=5050, host='0.0.0.0', debug=False)
