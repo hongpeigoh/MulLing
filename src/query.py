@@ -4,13 +4,125 @@ from . import processing, get
 from pkgs import LASER
 from sklearn.cluster import MeanShift
 
+def monolingual_annoy_query(self, q, model, lang, k, clustering=False):
+    # Vectorize query
+    q_vecs = LASER.get_vect(q)[0] if 'laser' in model else processing.vectorize_lang(self, q, lang) 
+    
+    # Find and return results in ranked list
+    if not clustering:
+        if 'sen' in model:
+            for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
+                yield (cs, self.s2d[model][lang][si], lang, si)
+        else:
+            for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
+                yield (cs, ai, lang, -1)
+    else:
+        if 'sen' in model:
+            tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True)))) if 'sen' in model else list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        else:
+            tmp = list([cs, ai, lang, -1] for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        vecs = np.array([self.docvecs[model][result[2]].get_item_vector(result[1]) for result in tmp])
+        clustering = MeanShift().fit(vecs)
+        for i in range(k):
+            yield tuple(tmp[i] + [clustering.labels_[i]])
+            
+
+
+def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True, lang_='en', olangs= None, clustering=False):
+    if L == -1:
+        L = k
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    if olangs == None:
+        olangs = self.langs
+    else:
+        for lang in olangs:
+            if lang not in self.langs:
+                raise KeyError('The specified output language is not accepted!')
+    
+    # Vectorize query
+    if 'laser' in model:
+        q_vecs = LASER.get_vect(q)[0]
+    else:
+        if multilingual:
+            q_vecs = processing.vectorize(self, q)
+        else:
+            q_vecs = processing.vectorize_lang(self, q, lang_)
+
+    # Find results
+    results = list()
+    for lang in olangs:
+        if 'sen' in model:
+            results += list((cs, self.s2d[model][lang][si], lang, si) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        else:
+            results += list((cs, ai, lang, -1) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+        self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
+
+    # Return results in ranked list
+    if normalize_top_L:
+        return sorted(results, key=lambda tuple_: get.normalizedtopLitem(self, tuple_))[:k]
+    else:
+        return sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:k]
+
+
+
+def ensemble_query(self, ensemble, q, k, lang='en', L=-1, normalize_top_L = True, multilingual = True):
+    if L == -1:
+        L = k
+    elif k> len(self.langs)*L:
+        raise ValueError('The number of search results cannot be displayed as L is too small!')
+    
+    if multilingual:
+        vec1 = processing.vectorize(self, q)
+    else:
+        vec1 = processing.vectorize_lang(self, q, lang)
+    vec2 = LASER.get_vect(q)[0]
+    q_vecs = {
+        'baa': vec1,
+        'bai': vec1,
+        'laser': vec2,
+        'metalaser': vec2
+    }
+
+    self.mean = {}
+    results = []
+    for lang_ in self.langs:
+        cs_rrl = [0 for _ in range(L)]
+        ai_rrl = [0 for _ in range(L)]
+        for index in range(len(self.docs[lang_])):
+            r = 0
+            for method_index, method in enumerate(['baa','bai','laser','metalaser']):
+                vec = self.docvecs[method][lang_].get_item_vector(index)
+                r += ensemble[method_index] * get.cosine_sim(vec, q_vecs[method])
+            
+            m = 0
+            while(m < L):
+                if r < cs_rrl[m]:
+                    m += 1 
+                else: 
+                    break
+            if m < L:
+                cs_rrl.insert(m, r)
+                ai_rrl.insert(m, index)
+                cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
+        results += list((cs, ai, lang_) for cs,ai in list(zip(cs_rrl, ai_rrl)))
+        self.mean[lang_] = statistics.mean([results[-i-1][0] for i in range(L)])
+    if normalize_top_L:
+        return sorted(results, key=lambda tuple_: get.normalizedtopLitem(self, tuple_))[:-k-1:-1]
+    else:
+        return sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:-k-1:-1]
+
+
+
 '''
+OLD STUFF
+
 Input Monolingual Query, searched using brute force on documents in query language.
 Instances two linked arrays: Cosine Similarity Ranked Relevance List and 
 Article Index Ranked Relevance List, by searching the k nearest neighbours.
 These results are then transposed to form an array of tuples 
 (CosineSimilarity, ArticleIndex, Language)
-'''
+
 def simple_query(self, q, lang, k):
     cs_rrl = [0 for _ in range(k)]
     ai_rrl = [0 for _ in range(k)]
@@ -37,7 +149,7 @@ def simple_query(self, q, lang, k):
             cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
     return list((cs, ai, lang) for cs,ai in list(zip(cs_rrl, ai_rrl)))
 
-'''
+
 Input Monolingual Query, searched using brute force on all documents in all languages.
 Instances two linked arrays: Cosine Similarity Ranked Relevance List and 
 Article Index Ranked Relevance List, by searching the k nearest neighbours.
@@ -45,7 +157,7 @@ These results are then transposed to form an array of tuples
 (CosineSimilarity, ArticleIndex, Language)
 
 Credits: Avery
-'''
+
 def simple_raw_score_merge_query(self, q, lang, k):
     q_tokens = processing.tokenize(lang, q)
     q_tokens_vecs = []
@@ -75,11 +187,11 @@ def simple_raw_score_merge_query(self, q, lang, k):
         results += list((cs, ai, lang_) for cs,ai in list(zip(cs_rrl, ai_rrl)))
     return sorted(results, key=get.item)[:-k-1:-1]
 
-'''
+
 Input Monolingual Query, searched using SciPy's KDTrees on documents in query language.
 The k nearest neighbours are returned in an array of tuples
 (CosineSimilarity, ArticleIndex, Language)
-''' 
+
 def kdtree_query(self, q, lang, k):
     q_tokens = processing.tokenize(lang,q)
     q_tokens_vecs = []
@@ -92,11 +204,11 @@ def kdtree_query(self, q, lang, k):
 
     return list((cs, int(ai), lang) for cs, ai in np.column_stack(self.kdtrees[lang].query(q_vecs/np.linalg.norm(q_vecs), k=k)).tolist())
 
-'''
+
 Input Query vectors (query has undergone tokenization and vectorization),searched 
 using brute force on documents in query language. Top k results are returned in
 (CosineSimilarity, ArticleIndex, Language)
-''' 
+ 
 def vec_query(self, q_vecs, lang, k):
     cs_rrl = [0 for _ in range(k)]
     ai_rrl = [0 for _ in range(k)]
@@ -112,18 +224,18 @@ def vec_query(self, q_vecs, lang, k):
             cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
     return list((cs, ai, lang) for cs,ai in list(zip(cs_rrl, ai_rrl)))
 
-'''
+
 Input Query vectors (query has undergone tokenization and vectorization),searched 
 using KDTrees on documents in query language. Top k results are returned in
 (CosineSimilarity, ArticleIndex, Language)
-''' 
+
 def vec_kdtree_query(self, q_vecs, lang, k):
     return list((cs, int(ai), lang) for cs, ai in np.column_stack(self.kdtrees[lang].query(q_vecs/np.linalg.norm(q_vecs), k=k)).tolist())
 
-'''
+
 Input Monolingual Title Query, searched using brute force on documents in query language.
 Results are similarly returned as (CosineSimilarity, ArticleIndex, Language)
-'''
+
 def title_query(self, q_vecs, lang, k):
     cs_rrl = [0 for _ in range(k)]          # Cosine Similarity Ranked Relevance List
     ai_rrl = [0 for _ in range(k)]          # Article Index Ranked Relevance List
@@ -142,7 +254,6 @@ def title_query(self, q_vecs, lang, k):
                 cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
     return list((cs, ai, lang) for cs,ai in list(zip(cs_rrl, ai_rrl)))
 
-'''
 Input Multilingual Query
 k : Number of ranked search results returned as (CosineSimilarity, ArticleIndex, Language)
 L : Maximum number of search results returned from any particular language. 
@@ -150,7 +261,7 @@ L : Maximum number of search results returned from any particular language.
 kdtree = True : uses KDTrees instead of brute force to search. 
                 Cosine Similarity (Descending) is replaced with Distance (Ascending)
 normalize_top_L = True : normalizes the returned results by the mean cosine similarity of the top L results
-'''
+
 def mulling_query(self, q, k, L=-1, kdtree = False, normalize_top_L = False):
     if L == -1:
         L = k
@@ -218,110 +329,4 @@ def laser_mulling_query(self, q, k, L=-1, normalize_top_L = False):
         return sorted(results, key=lambda tuple_: get.normalizedtopLitem(self, tuple_))[:k]
     else:
         sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:-k-1:-1]
-
-def ensemble_query(self, ensemble, q, k, lang='en', L=-1, normalize_top_L = True, multilingual = True):
-    if L == -1:
-        L = k
-    elif k> len(self.langs)*L:
-        raise ValueError('The number of search results cannot be displayed as L is too small!')
-    
-    if multilingual:
-        vec1 = processing.vectorize(self, q)
-    else:
-        vec1 = processing.vectorize_lang(self, q, lang)
-    vec2 = LASER.get_vect(q)[0]
-    q_vecs = {
-        'baa': vec1,
-        'bai': vec1,
-        'laser': vec2,
-        'metalaser': vec2
-    }
-
-    self.mean = {}
-    results = []
-    for lang_ in self.langs:
-        cs_rrl = [0 for _ in range(L)]
-        ai_rrl = [0 for _ in range(L)]
-        for index in range(len(self.docs[lang_])):
-            r = 0
-            for method_index, method in enumerate(['baa','bai','laser','metalaser']):
-                vec = self.docvecs[method][lang_].get_item_vector(index)
-                r += ensemble[method_index] * get.cosine_sim(vec, q_vecs[method])
-            
-            m = 0
-            while(m < L):
-                if r < cs_rrl[m]:
-                    m += 1 
-                else: 
-                    break
-            if m < L:
-                cs_rrl.insert(m, r)
-                ai_rrl.insert(m, index)
-                cs_rrl, ai_rrl = cs_rrl[:-1], ai_rrl[:-1]
-        results += list((cs, ai, lang_) for cs,ai in list(zip(cs_rrl, ai_rrl)))
-        self.mean[lang_] = statistics.mean([results[-i-1][0] for i in range(L)])
-    if normalize_top_L:
-        return sorted(results, key=lambda tuple_: get.normalizedtopLitem(self, tuple_))[:-k-1:-1]
-    else:
-        return sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:-k-1:-1]
-
-
-def monolingual_annoy_query(self, q, model, lang, k, clustering=False):
-    # Vectorize query
-    q_vecs = LASER.get_vect(q)[0] if 'laser' in model else processing.vectorize_lang(self, q, lang) 
-    
-    # Find and return results in ranked list
-    if not clustering:
-        if 'sen' in model:
-            for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
-                yield (cs, self.s2d[model][lang][si], lang, si)
-        else:
-            for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
-                yield (cs, ai, lang, -1)
-    else:
-        if 'sen' in model:
-            tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True)))) if 'sen' in model else list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
-        else:
-            tmp = list([cs, ai, lang, -1] for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
-        vecs = np.array([self.docvecs[model][result[2]].get_item_vector(result[1]) for result in tmp])
-        clustering = MeanShift().fit(vecs)
-        for i in range(k):
-            yield tuple(tmp[i] + [clustering.labels_[i]])
-            
-    
-
-def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True, lang_='en', olangs= None, clustering=False):
-    if L == -1:
-        L = k
-    elif k> len(self.langs)*L:
-        raise ValueError('The number of search results cannot be displayed as L is too small!')
-    if olangs == None:
-        olangs = self.langs
-    else:
-        for lang in olangs:
-            if lang not in self.langs:
-                raise KeyError('The specified output language is not accepted!')
-    
-    # Vectorize query
-    if 'laser' in model:
-        q_vecs = LASER.get_vect(q)[0]
-    else:
-        if multilingual:
-            q_vecs = processing.vectorize(self, q)
-        else:
-            q_vecs = processing.vectorize_lang(self, q, lang_)
-
-    # Find results
-    results = list()
-    for lang in olangs:
-        if 'sen' in model:
-            results += list((cs, self.s2d[model][lang][si], lang, si) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
-        else:
-            results += list((cs, ai, lang, -1) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
-        self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
-
-    # Return results in ranked list
-    if normalize_top_L:
-        return sorted(results, key=lambda tuple_: get.normalizedtopLitem(self, tuple_))[:k]
-    else:
-        return sorted(results, key=lambda tuple_: get.normalizeditem(self,tuple_))[:k]
+'''
