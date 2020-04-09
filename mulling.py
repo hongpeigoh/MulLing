@@ -76,7 +76,7 @@ class MulLingVectorsAnnoy:
         self.idfs = {}
         print('All models are loaded.')
         
-    def load(self, lang:str):
+    def load(self, lang):
         directory = (self.path, lang)
         # Loads aligned word vectors
         if not os.path.isfile('%s/%s/wordvecs.txt' % directory):
@@ -94,7 +94,7 @@ class MulLingVectorsAnnoy:
             print('Importing articles from %s/%s/articles.pkl' % directory)
             self.docs[lang] = pickle.load(open('%s/%s/articles.pkl' % directory, 'rb'))
 
-    def calculate(self, model:str, lang:str, directory:tuple):
+    def calculate(self, model, lang, directory):
         if model == 'baa':
             print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Text')
             
@@ -248,5 +248,5 @@ class MulLingVectorsAnnoy:
 
 
         self.docvecs[model][lang].build(math.floor(math.log(len(self.docs[lang]))))
-        self.docvecs[model][lang].save('%s/annoy/%s/%s.ann' % directory)
+        self.docvecs[model][lang].save('%s/%s/%s.ann' % directory)
         print('Annoy Index is saved and loaded in %s for %s model and %s lang saved and loaded!' % directory)
