@@ -34,13 +34,13 @@ We run on the following dependencies:
 
 Sample command to download requirements
 ```
-$ pip install spacy jieba malaya nltk googletrans scikit-posthocs annoy Flask flask_cors flask-wtf && python -m spacy download en_core_web_md & python -i
+$ pip install spacy jieba malaya nltk googletrans scikit-posthocs annoy Flask flask_cors flask-wtf && python -m spacy download en_core_web_md && python -i
 >>> import nltk
 >>> nltk.download('punkt')
 ^Z
 $ cat anaconda3/lib/site-packages/malaya/_utils/utils.py
 7 | from tqdm import tqdm
-8 | ---remove deprecated tensorflow beam_search_ops lib import--
+8 | ---remove deprecated tensorflow beam_search_ops lib import---
 9 | from functools import wraps
 ```
 
@@ -110,6 +110,7 @@ Should you wish to evaluate the current methods, the corpora used are provided b
 | Mandarin (zh) | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
 | Malay (ms)    | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
 | Tamil (ta)    | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
+   
 
 # Pre-processing
 
@@ -260,18 +261,115 @@ Refer to the interactive Jupyter Notebook to see the implementation of relevant 
 
 # Evaluation methodology
 
+## Statistical Method
+
 Using a non-parametric statistical evaluation of the models, an ensemble will be learnt from a data-set of given queries. There are two phases.
 
 1. Comparative evaluation
 2. Verification
 
-For the comparative evaluation, no assumptions regarding the distribution of the corpora in the n-dimensional space are necessary. Using Friedman's non-parametric chi-squared test, the performance of the models can be evaluated comparatively. First, the models are tested for similar distributions i.e. statistically likely to rank the relevant articles similarly as given by the p-value (p>0.05 suggests they are similarly ranked which verifies the assumption that these articles are relevant in all models). 
+For the comparative evaluation, no assumptions regarding the distribution of the corpora in the n-dimensional space are necessary. We can also assume that all models generate decent results and return true precise results and that our base model to be excluded in final evaluation has good recall. Due to overfitting, we will also exclude models similar to base model.
+
+The data we are using will be the top 500 most searched news article titles as unlabelled queries. After excluding several overly short queries, we have 503 queries (`:thinking:`).
+
+Using Friedman's non-parametric chi-squared test, the performance of the models can be evaluated comparatively. First, the baseline model is used to extract generally relevant results for testing, `L` results per language and `k=4L` total results. Each model is then tasked to predict the similarity (angular distance) between the query vector and the document vector. Under the test assumptions of the Friedman's test, that
+
+1. Measured by at least three methods
+2. Random sample from population of relevant articles
+3. Scoring is continuous
+4. No need for normal distribution
+
+The conditions of testing the 5 models (except for the `meta` model as baseline and `metalaser` which is too similar) are met and can be tested under the Friedman test for similar distributions i.e. statistically likely to rank the relevant articles similarly as given by the p-value (high p value suggests they are similarly ranked which verifies the assumption that these articles are relevant in all models). As the number of methods increase, the p value drops exponentially when different models rank them even slightly differently. As such, we will conduct a post hoc test to determine the pairwise p-value instead.
  
 If the models are shown to rank the relevant articles similarly, pairwise comparisons of the models are conducted using Nemenyi's tests which show how similar the rankings are. By taking the geometric mean of all Nemenyi test p-values of pairwise compared models for each model, this creates a reward-punishment model that effectively reward models that rank results similarly and punish those that rank them differently (Regression). 
  
-Using these geometric means, an ensemble of values is generated for the given query that would be representative to how well each model has ranked the articles. The mean ensemble is taken as the new baseline model.
+Using these geometric means, an ensemble of values is generated for the given query that would be representative to how well each model has ranked the articles. The mean ensemble is taken as the new baseline model. To verify the ensemble, we run the same comparison test, including the ensemble model as a new model. If it is shown statistically that the new geometric means from the reward-punishment model prefer the ensemble, it will be verified as a effective model.
 
-To verify the ensemble, we run the same comparison test, includin the ensemble model as a new model. If it is shown statistically that the new geometric means from the reward-punishment model prefer the ensemble, it will be verified as a effective model.
+### Results
+
+**Parameters:**
+- Base model: `meta`
+- k: `24`, L: `6`
+- Excluded models: `metalaser` due to similarity to baseline model
+- Included models: `baa`, `bai`, `laser`, `senlaser`, `senbai`
+
+| Model  | baa | bai | laser | senlaser | senbai |
+|--------|-----|-----|-------|----------|--------|
+|Ensemble|0.245|0.253| 0.220 | 0.031    | 0.252  |
+
+### Conclusion
+
+We make a few generalisations about the models here. Sentence LASER model performs poorly in this task and TF-IDF methods generally performs slightly better than vector addition methods. LASER methods perform marginally worse than BoW models. However, there are some concerns with this method of evaluation, namely that a meta-evaluation is not a full representation of true performance and serves to show the outlier models (i.e. senlaser). We can use several implications here in the next evaluation methodology.
+
+## Evaluation with labelled data
+
+Using the languages I know well, i.e. English and Chinese, I created a small dataset of manually tagged data for each of the language pairs, `en-en`, `en-zh`, `zh-en`, `zh-zh`. We can use this to hypertune parameters to improve the models subsequently and perhaps consider zero-shot cross lingual evaluation for Malay (`ms`) and Tamil (`ta`).
+
+We test each model on its recall of the document tagged to the query for varying degrees of retrieved documents `k`. Repeating several times, this is averaged out for each query to determine average precision and across the set of all queries to receive the MAP score.
+
+### Results
+*The queries were tagged mainly as a summary of the article with huge reference to the article title especially for the same language pairs and is hence significantly overfitted.
+
+**en-en**
+
+| Model | K = 1 | K = 5 | K = 10 | K = 50 | K = 100 |
+|-------|-------|-------|--------|--------|---------|
+| baa | 0.19 | 0.24 | 0.27 | 0.31 | 0.34 | 
+| meta* | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 
+| bai | 0.22 | 0.26 | 0.27 | 0.33 | 0.33 | 
+| senbai | 0.15 | 0.18 | 0.23 | 0.33 | 0.35 | 
+| laser | 0.01 | 0.01 | 0.01 | 0.02 | 0.02 | 
+| metalaser* | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 
+| senlaser | 0.01 | 0.01 | 0.01 | 0.01 | 0.01 | 
+
+**en-zh**
+
+| Model | K = 1 | K = 5 | K = 10 | K = 50 | K = 100 |
+|-------|-------|-------|--------|--------|---------|
+| baa | 0.09 | 0.13 | 0.14 | 0.21 | 0.25 | 
+| meta* | 0.39 | 0.46 | 0.47 | 0.48 | 0.51 | 
+| bai | 0.11 | 0.13 | 0.17 | 0.25 | 0.28 | 
+| senbai | 0.10 | 0.15 | 0.17 | 0.22 | 0.22 | 
+| laser | 0.03 | 0.03 | 0.03 | 0.03 | 0.03 | 
+| metalaser* | 0.20 | 0.23 | 0.23 | 0.23 | 0.24 | 
+| senlaser | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 
+
+
+**zh-en**
+
+| Model | K = 1 | K = 5 | K = 10 | K = 50 | K = 100 |
+|-------|-------|-------|--------|--------|---------|
+| baa | 0.10 | 0.15 | 0.18 | 0.29 | 0.32 | 
+| meta* | 0.55 | 0.57 | 0.58 | 0.60 | 0.61 | 
+| bai | 0.12 | 0.19 | 0.21 | 0.32 | 0.34 | 
+| senbai | 0.03 | 0.12 | 0.14 | 0.20 | 0.24 | 
+| laser | 0.03 | 0.03 | 0.03 | 0.03 | 0.03 | 
+| metalaser* | 0.18 | 0.20 | 0.20 | 0.20 | 0.20 | 
+| senlaser | 0.01 | 0.01 | 0.01 | 0.02 | 0.03 | 
+
+
+**zh-zh**
+
+| Model | K = 1 | K = 5 | K = 10 | K = 50 | K = 100 |
+|-------|-------|-------|--------|--------|---------|
+| baa | 0.31 | 0.33 | 0.37 | 0.42 | 0.43 | 
+| meta* | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 
+| bai | 0.31 | 0.36 | 0.38 | 0.42 | 0.45 | 
+| senbai | 0.29 | 0.34 | 0.41 | 0.46 | 0.49 | 
+| laser | 0.02 | 0.03 | 0.03 | 0.03 | 0.03 | 
+| metalaser* | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 
+| senlaser | 0.01 | 0.02 | 0.02 | 0.02 | 0.02 | 
+
+**Graphs**
+
+![by language](./dump/results1.png)
+![by model](./dump/results2.png)
+
+### Conclusion
+
+The results from the first method are mostly corroborated. In the task of information retrieval, using a Bag of Words/Concepts model is preferable as semantics and pedantics are often lost between documents, sentences, titles and queries. As such, the Bi-LSTM models can seem ill-fitted for general IR tasks. However, in practice, it is able to search for exactly fitted sentences with a given threshold very well due to the sparse-ness of the vector space.
+
+The Bag of Word models perform better when done across the whole document to preserve its general idea and meaning as well as the same keywords. Moreover, the TF-IDF models offer slightly better performance for filtering out common words and rare keywords.
 
 # Application
 
