@@ -3,7 +3,7 @@ import numpy as np
 import subprocess
 import platform #for OS name
 
-address = '127.0.0.1:8050'
+address = '192.168.99.100:8050'
 
 def check_if_laser_start():
     if isinstance(get_vect('Hello World'), (list, tuple, np.ndarray)):
