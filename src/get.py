@@ -60,7 +60,7 @@ def json(self, query_results, model):
     for index, result in enumerate(query_results):
         rank = str(index+1)
         score = str(result[0])
-        clustering = str(result[3])
+        clustering = str(result[4])
         title = self.docs[result[2]][result[1]][0]
         text = self.docs[result[2]][result[1]][1]
         if result[3] >= 0:
@@ -71,10 +71,6 @@ def json(self, query_results, model):
                 yield ('\t'.join([rank, score, clustering, title, text]))
         else:
             yield ('\t'.join([rank, score, clustering, title, text]))
-
-# Get readable results of enumerated titles and articles from a query:
-def jsonall(self, query_results):
-    return ['<h3>%i. %s</h3>' % (index+1, self.docs[result[2]][result[1]][0]) + self.docs[result[2]][result[1]][1][:400] + '...' for index, result in enumerate(query_results)]
 
 # Get accuracy using evaluate.py
 def accuracy(self, results, q, k, angular=True):

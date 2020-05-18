@@ -14,16 +14,16 @@ from pkgs import LASER
 # Mean Square Cosine Similarity, only test for non KD-Tree queries.
 def evaluate_precision(self, results, angular=True):
     if angular:
-        return mean([(1 - (cs**2)/2)**2 for cs, ai, lang in results])**0.5
+        return mean([(1 - (result[0]**2)/2)**2 for result in results])**0.5
     else:
-        return mean([(cs**2) for cs, ai, lang in results])**0.5
+        return mean([(result[0]**2) for result in results])**0.5
 
 # Half-L Recall
 def evaluate_recall(self, results, q, k, L=-1):
     if L == -1:
         L = k//4
-    list1 = [(ai, lang) for cs, ai, lang in results]
-    list2 = [(ai, lang) for cs, ai, lang in query.mulling_annoy_query(self, q, 'bai', k=4*k, L=4*L)]
+    list1 = [(result[1], result[2]) for result in results]
+    list2 = [(result[1], result[2]) for result in query.mulling_annoy_query(self, q, 'bai', k=4*k, L=4*L)]
     return len(set(list1).intersection(set(list2)))/len(list1)
 
 def cossim(v1, v2):
@@ -57,7 +57,7 @@ class Evaluator:
         bigvects = LASER.get_vect(bigtext, lang='en')
         smallvects = list()
         for query_ in self.queries:
-            smallvects.append(processing.vectorize_lang(MulLingObject, query_, 'en'))
+            smallvects.append(processing.vectorize_lang(MulLingObject, query_, 'en', raise_error=False))
 
         # Creating a dataframe for each query in the dataset
         self.data = dict()
@@ -74,7 +74,7 @@ class Evaluator:
             except:
                 print(query_)
             # Appending the relevant articles to the dataframe
-            new_row = pd.Series(dict(zip(self.data[query_].columns, ['Title']+ [(ai, lang) for cs,ai, lang in results])))
+            new_row = pd.Series(dict(zip(self.data[query_].columns, ['Title']+ [(result[1], result[2]) for result in results])))
             self.data[query_] = self.data[query_].append(new_row, ignore_index=True)
 
             # Calculating cosine similarity between query and above articles
