@@ -20,14 +20,19 @@
     "bootstrap-4-grid": "^3.4.0",
     "jquery": "^3.4.1",
     "marked": "^0.8.0",
+    "plotly.js-cartesian-dist": "^1.54.1",
     "popper.js": "^1.16.1",
     "react": "^16.13.0",
     "react-app-rewired": "^2.1.5",
     "react-dom": "^16.13.0",
+    "react-draggable": "^4.3.1",
+    "react-keydown": "^1.9.12",
     "react-markdown": "^4.3.1",
+    "react-plotlyjs": "^0.4.4",
     "react-router-dom": "^5.1.2",
     "react-scripts": "3.4.0",
-    "react-tooltip": "^4.1.3"
+    "react-tooltip": "^4.1.3",
+    "react-widget-popup": "^3.4.2"
   },
   "scripts": {
     "start": "react-app-rewired start",

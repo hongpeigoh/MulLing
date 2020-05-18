@@ -1,24 +1,44 @@
 import React, { Component, useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Button } from '@progress/kendo-react-buttons';
-import { Checkbox, NumericTextBox } from '@progress/kendo-react-inputs';
+import { Checkbox, NumericTextBox, } from '@progress/kendo-react-inputs';
 import { DropDownList } from '@progress/kendo-react-dropdowns';
+import withValueField from './withValueField.jsx';
 import Loading from './widget.js'
+import SearchProcess from '../images/searchprocess.png'
+
+const DropDownListWithValueField = withValueField(DropDownList)
+
+class HomeHead extends Component{
+  render() {
+    return (
+      <div className="app-header" id="home-header">
+        <div className="app-container container">
+          <div className="row textcontent">
+            <h1 className="center">MulLing</h1>
+            <div className="col" id="searchbox">
+              <Form/>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
 
 class Home extends Component{
   render() {
     return (
-      <div className='home'>
-        <div className="row" id="block-20"/>
-        <div className="row" id="searchbox">
-          <div className="col">
-            <div className="row">
-              <h1>Multilingual Information Retrieval (MulLing)</h1>
-            </div>
-            <Form/>
-            <div className="row" id="refresh-div" />
-            <div className="row" id="input-to-results" />
-            </div>
+      <div className='app-container container home width-70' id='app-container'>
+        <div className="row" id="refresh-div" />
+        <div className="row" id="input-to-results" />
+        <div className="row" id="input-to-hidden-results" style={{display: "none"}}/>
+        <div className="row textcontent">
+          <h2>How does MulLing Search work?</h2>
+          <img src={SearchProcess} alt="How does MulLing Search work?"/>
+          <p><strong>Choose your filters: </strong>Vary the number of results to query, the input and output languages and the language model.</p>
+          <p><strong>Query the database: </strong>Search from the corpora of articles from Singaporean news websites from the past few years.</p>
+          <p><strong>Access the results: </strong>Expand to view the full articles and see related articles. Click the link to access an external source.</p>
         </div>
       </div>
     );
@@ -32,11 +52,10 @@ class Refresh extends Component{
   }
 
   handleReload = e => {
-    window.anim_searchbox.reverse();
-    window.anim_blockcollapse.reverse();
-
     ReactDOM.unmountComponentAtNode(document.getElementById("input-to-results"));
+    ReactDOM.unmountComponentAtNode(document.getElementById("input-to-hidden-results"));
     ReactDOM.render('', document.getElementById("refresh-div"));
+    document.getElementById('searchbox').style.borderBottomWidth = "0px";
   }
 
   render() {
@@ -54,11 +73,14 @@ class Form extends Component {
     this.textInput = React.createRef();
     this.handleChange = this.handleChange.bind(this);
     this.handleCheckbox = this.handleCheckbox.bind(this);
+    this.handleValueChange = this.handleValueChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
     this.toggleFilter = this.toggleFilter.bind(this);
+    this.toggleResults = this.toggleResults.bind(this);
+    this.toggleCollapse = this.toggleCollapse.bind(this);
     this.state = {
       lang: 'en',
-      model: 'baa',
+      model: 'bai',
       k: 20,
       monolingual: true,
       disabled: true,
@@ -69,20 +91,28 @@ class Form extends Component {
       oms: true,
       ota: true,
       isCardView: false,
+      isClust: true,
     }
-    this.models = ["baa", "meta", "bai", "senbai", "laser", "metalaser", "senlaser"]
-    this.modelnames = ["Vector Addition Text", "Vector Addition Title", "TF-IDF Text", "TF-IDF Sentences", "Bi-LSTM Text", "Bi-LSTM Title", "Bi-LSTM Sentences"]
+    this.models = [
+      {text: "Vector Addition Text", id: "baa"},
+      {text: "Vector Addition Title", id: "meta"},
+      {text: "TF-IDF Text", id: "bai"},
+      {text: "TF-IDF Sentences", id: "senbai"},
+      {text: "Bi-LSTM Text", id: "laser"},
+      {text: "Bi-LSTM Title", id: "metalaser"},
+      {text: "Bi-LSTM Sentences", id: "senlaser"}];
   }
 
-  componentDidUpdate(prevState) {
-    for (const key in this.state) {
-      if (this.state.key !== prevState.key) {
-        this.setState({key: this.state.key});
-      }
-    }
-  }
+  // componentDidUpdate(prevState) {
+  //   for (const key in this.state) {
+  //     if (this.state.key !== prevState.key) {
+  //       this.setState({key: this.state.key});
+  //     }
+  //   }
+  // }
 
   handleSubmit = e => {
+    var self = this;
     e.preventDefault();
 
     const monolingual = ( this.state.monolingual ? 'mono' : 'multi');
@@ -95,50 +125,55 @@ class Form extends Component {
         '&oms=' + String(this.state.oms) + 
         '&ota=' + String(this.state.ota) );
     const encodedquery = encodeURIComponent(this.textInput.current.value)
-    const queryaddress = "http://192.168.137.217:5050/query_" + monolingual + "?q="+ encodedquery + "&model=" + this.state.model + "&lang=" + this.state.lang + "&k=" + this.state.k + suffix
+    const queryaddress = "http://localhost:5050/query_" + monolingual + "?q="+ encodedquery + "&model=" + this.state.model + "&lang=" + this.state.lang + "&k=" + this.state.k + suffix
 
     console.log(queryaddress);
 
     // Styling
-    ReactDOM.render(<Refresh/>, document.getElementById("refresh-div"));
+    ReactDOM.render([
+      <div className="col-6"><Button onClick={this.toggleResults} togglable={true} primary={true}>Cluster Results&nbsp;&nbsp;</Button></div>,
+      <div className="col-6 right"><Refresh/></div> ], document.getElementById("refresh-div"));
     ReactDOM.render(<Loading />, document.getElementById("input-to-results"))
 
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {      
-      if (xhttp.readyState === 3 && xhttp.status === 200) {
-        if (document.getElementById('searchbox').style.transform === "" | document.getElementById('searchbox').style.transform === "none") {
-          window.anim = { fill: 'forwards', duration: 300 };
-          window.anim_blockcollapse = document.getElementById('block-20').animate(
-            [
-              {height: '10vh'},
-              {height: '0vh'}
-            ], window.anim);
-          window.anim_searchbox = document.getElementById('searchbox').animate(
-            [
-              {backgroundColor: 'rgba(255,255,255,0.6)', paddingTop: '5vw', borderRadius: '3vw', width: 'auto', transform: 'none', marginLeft: '0vw'},
-              {backgroundColor: 'rgba(255,255,255,1)', paddingTop: '0', borderRadius: '0', width: '105vw', transform: 'translate3d(-20vw,0,0)', marginLeft: '5vw'}
-            ], window.anim);
-        }
-      } else if(xhttp.readyState === 4 && xhttp.status === 200){
+      if (xhttp.readyState === 4 && xhttp.status === 200){
         // Add Results
-        var Children = [<PreSnippet key={0}/>]
+        var PreChildren = [<PreSnippet key={0}/>];
+        var MainChildren = [];
+        var UnclusChildren = [];
+        var PostChildren = [
+          <span className="center" style={{width:"100%"}}>
+            <Button icon="right" onClick={self.toggleCollapse}></Button>
+          </span>];
         var myResults = JSON.parse(String(this.response)).allresults.map( x => x.split('\t'));
-        for (const result of myResults){
-          let related = myResults.filter(function (e) {
-            return e[2] === result[2] && e !== result;
-          }).map(x=>x[0]);
-          var relatedtext = (related.length > 3 ? 'Related to Articles: ' + related.slice(0,3).join(', ') : (related.length === 0 ? 'No Related Articles.' : 'Related to Articles: ' + related.join(', ')));
 
+        // Add Clustered Results
+        var ClusterLen = Math.max.apply(Math, myResults.map(e => e[2])) + 1; //Number of Clusters = Max of Clustering Labels
+        for (let step = 0; step < ClusterLen; step++) {
+          MainChildren.push([]);
+        }
+
+        for (const result of myResults){
           var fields = {
             rank: result[0],
             title: result[3],
             article: result[4],
             bestsentence: (result.length === 6 ? result[5] : null),
-            related: relatedtext
           };
-          Children.push(<Snippet key={fields.rank} fields={fields} query={decodeURIComponent(encodedquery)}/>);
+          if ( MainChildren[result[2]].length === 0 ){
+            MainChildren[result[2]].push(<span><div className="row"><h2>Cluster {parseInt(result[2],10)+1}:</h2></div></span>);
+            MainChildren[result[2]].push(<Snippet key={String(fields.rank)} fields={fields} clust={true} isClust={false}/>);
+          } else {
+            if ( MainChildren[result[2]].length === 2 ){MainChildren[result[2]].push(<span><div className="row">Similar Results:</div></span>);}
+            MainChildren[result[2]].push(<Snippet key={String(fields.rank)} fields={fields} clust={true} isClust={self.state.isClust}/>);
+          }
+          UnclusChildren.push(<Snippet key={String(fields.rank)} fields={fields} clust={false} isClust={self.state.isClust}/>);
         }
-        ReactDOM.render(Children, document.getElementById('input-to-results'));
+
+        ReactDOM.render(PreChildren.concat(UnclusChildren) , document.getElementById('input-to-results'));
+        ReactDOM.render(PreChildren.concat(MainChildren.map((array, index)=>React.createElement( "span", { className:"cluster", id: "cluster" + String(index+1) }, array))).concat(PostChildren) , document.getElementById('input-to-hidden-results'));
+
       } else if(xhttp.readyState === 4 && xhttp.status === 500){
         ReactDOM.render(<ErrorSnippet status={xhttp.status}/>, document.getElementById('input-to-results'));
       }
@@ -174,10 +209,10 @@ class Form extends Component {
       });
     }
   }
-  itemRender = (li, itemProps) => {
-    const index = itemProps.index;
-    const itemChildren = <span>{this.modelnames[index]} ({li.props.children})</span>;
-    return React.cloneElement(li, li.props, itemChildren);
+  handleValueChange = (event) => {
+    this.setState({
+        model: event.target.value
+    });
   }
   toggleFilter = e => {
     this.setState({ isCardView: !this.state.isCardView })
@@ -187,14 +222,19 @@ class Form extends Component {
       document.getElementById("collapsible").style.maxHeight = "0px";
     }
   }
-  valueRender = (element, value) => {
-    const index = this.models.indexOf(value);
-    const itemChildren = <span>{this.modelnames[index]} </span>;
-    this.state.model = value;
-    return React.cloneElement(element, element.props, itemChildren);
+  toggleResults() {
+    if (document.getElementById("input-to-results").style.display !== 'none') {
+      document.getElementById("input-to-results").style.display = 'none';
+      document.getElementById("input-to-hidden-results").style.display = 'flex';
+    } else {
+      document.getElementById("input-to-results").style.display = 'flex';
+      document.getElementById("input-to-hidden-results").style.display = 'none';
+    };
+  }
+  toggleCollapse() {
+    this.setState({ isClust: !this.state.isClust })
   }
 
-  //{String(this.state.disabled).replace('false','(Unsupported)').replace('true','')}
   render() {
     return (
       <div>
@@ -218,7 +258,7 @@ class Form extends Component {
         </form>
       </div>
       <div className="row" id="collapsible">
-          <div className="col-12 col-md-3">
+          <div className="col-12 col-md-4 col-xl-3">
             <h4>Input Language</h4>
             <div className="row">
               <div className="col-6 col-md-12 col-xl-6">
@@ -240,7 +280,7 @@ class Form extends Component {
               <label className="k-radio-label" htmlFor="r5">Unspecified</label>
             </div>
           </div>
-          <div className="col-12 col-md-3">
+          <div className="col-12 col-md-4 col-xl-3">
             <h4>Output Language</h4>
             <div className="row">
               <div className="col-6 col-md-12 col-xl-6">
@@ -253,15 +293,16 @@ class Form extends Component {
               </div>
             </div>
           </div>
-          <div className="col-12 col-md-3 col-xl-6">
+          <div className="col-12 col-md-4 col-xl-6">
             <div className="row">
               <div className="col-6 col-md-12 col-xl-6">
                 <h4>Model</h4>
-                <DropDownList
+                <DropDownListWithValueField
                   data = {this.models}
-                  defaultValue = {this.models[2]}
-                  itemRender = {this.itemRender}
-                  valueRender = {this.valueRender}
+                  textField = "text"
+                  valueField = "id"
+                  value = {this.state.model}
+                  onChange = {this.handleValueChange}
                 />
               </div>
               <div className="col-6 col-md-12 col-xl-6">
@@ -278,6 +319,7 @@ class Form extends Component {
   }
 }
 
+
 function Snippet(props) {
   const toggletext =
   (props.fields.bestsentence == null
@@ -289,21 +331,46 @@ function Snippet(props) {
     props.fields.article.replace(props.fields.bestsentence, '<b>'+props.fields.bestsentence+'</b>').replace(/\n/g,"<br/><br/>")] );
   const [display, setDisplay] = useState(0);
   const [isShown, setIsShown] = useState(false);
+  const [toggleMinimise, setToggleMinimise] = useState(Boolean(props.clust && props.isClust));
   const ddg_link = "https://duckduckgo.com/?q=!ducky+" + encodeURIComponent(props.fields.title)
   
   useEffect(() => {
-    var changeResult = document.getElementById("search-result-" + props.fields.rank);
+    var changeResult = document.getElementById(`search-result-${props.fields.rank}${props.clust}`);
     changeResult.innerHTML = '<p>' + changeResult.innerText + '</p>';
-  }, [display, props.fields.rank]);
-
+  }, [display, props.fields.rank, props.clust]);
+  
   return(
+    ( props.clust && props.isClust && toggleMinimise ?
     <span className="result" onMouseEnter={() => setIsShown(true)} onMouseLeave={() => setIsShown(false)}>
       <div className="row">
+        <small><button
+          title={toggletext[0]}
+          onClick={()=>setToggleMinimise(!toggleMinimise)}>
+          {props.fields.title}</button></small>
+      </div>
+      <div className="row search-result" id={"search-result-" + props.fields.rank + props.clust} onClick={()=>setDisplay(1-display)} style={{display: "none"}}>
+      </div>
+      
+    </span>
+     :
+    <span className="result" onMouseEnter={() => setIsShown(true)} onMouseLeave={() => setIsShown(false)}>
+      <div className="row">
+        <div className="col">
         <h2><a
           target="_blank"
           rel="noopener noreferrer"
           href={ddg_link}>
           {props.fields.title}</a></h2>
+        </div>
+        {( props.clust && props.isClust && !toggleMinimise ?
+          <div className="col-2 right" style={{ paddingTop: "5px"}}>
+            <span style={{ backgroundColor: "rgb(195,60,60"}}>
+              <Button onClick={()=>setToggleMinimise(!toggleMinimise)}>Hide</Button>
+            </span>
+          </div>
+          : null )}
+        
+        
       </div>
       <div className="row">
         <h5><a
@@ -312,14 +379,14 @@ function Snippet(props) {
           href={ddg_link}>
           {(ddg_link.length >= 90 ? ddg_link.substring(0,90) + '...' : ddg_link)}</a></h5>
       </div>
-      <div className="row search-result" id={"search-result-" + props.fields.rank} onClick={()=>setDisplay(1-display)}>
+      <div className="row search-result" id={"search-result-" + props.fields.rank + props.clust} onClick={()=>setDisplay(1-display)}>
         {toggletext[display]}
       </div>
       <div className="row">
         <small>{props.fields.related}</small>
       </div>
       {isShown ? (
-        <div className="row">
+        <div className="row" style={{height: "36px"}}>
           {(toggletext[0]===toggletext[1] ? '' : <Button icon="hyperlink-open" onClick={()=>setDisplay(1-display)} look="bare" >{(display===0 ? 'Expand' : 'Collapse')} Article</Button>)}
         </div>
       ) : (
@@ -327,6 +394,7 @@ function Snippet(props) {
       )}
       
     </span>
+    )
   )
 }
 
@@ -345,4 +413,4 @@ function ErrorSnippet(props) {
   )
 }
 
-export default Home
+export { Home, HomeHead };

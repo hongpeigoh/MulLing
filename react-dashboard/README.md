@@ -33,5 +33,9 @@ You can learn more in the [Create React App documentation](https://facebook.gith
 
 To learn React, check out the [React documentation](https://reactjs.org/).
 
+## Node Modules
+
+Currently using [these node modules](https://drive.google.com/file/d/1HACe4MCJBCCpitHgOBRdp8LCo4cNymk5/view?usp=sharing)
+
 
 
