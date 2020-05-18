@@ -63,7 +63,7 @@ class MulLingVectorsAnnoy:
                 if os.path.isfile('%s/%s/%s.ann' % directory):
                     if 'sen' in model and os.path.isfile('%s/%s/s2d%s.pkl' % directory):
                         self.s2d[model][lang] = pickle.load( open('%s/%s/s2d%s.pkl' % directory,'rb'))
-                        print('Loading sentence to document index from %s/%s/s2d%s.pkl' % directory)
+                        print('Loading sentence to document index from %s/%s/s2d%s.pkl.' % directory)
                     self.docvecs[model][lang].load('%s/%s/%s.ann' % directory)
                     print('Loading document vectors from %s/%s/%s.ann.' % directory)
 
@@ -73,7 +73,11 @@ class MulLingVectorsAnnoy:
                     self.calculate(model, lang, directory)
 
         # Clear memory
+        if not os.path.isfile('%s/pickle/idfs.pkl' % self.path) :
+            pickle.dump( self.idfs, open('%s/pickle/idfs.pkl' % self.path, 'wb'))
+        print('IDFs saved at %s/pickle/idfs.pkl' % self.path)
         self.idfs = {}
+
         print('All models are loaded.')
         
     def load(self, lang):
@@ -82,21 +86,22 @@ class MulLingVectorsAnnoy:
         if not os.path.isfile('%s/%s/wordvecs.txt' % directory):
             raise IOError('File %s/%s/wordvecs.txt does not exist' % directory)
         else:
-            print('Importing FastText Vectors for %s' % lang)
-            self.vecs[lang] = FastVector(vector_file = '%s/%s/wordvecs.txt' % directory)
+            if lang != 'ta':
+                print('Importing FastText Vectors for %s' % lang)
+                self.vecs[lang] = FastVector(vector_file = '%s/%s/wordvecs.txt' % directory)
 
         # Load monolingual corpora
         if lang in self.docs:
             pass
-        elif not os.path.isfile('%s/%s/articles.pkl' % directory):
-            raise IOError('File %s/%s/articles.pkl does not exist' % directory)
+        elif not os.path.isfile('%s/%s/articles.pkl.' % directory):
+            raise IOError('File %s/%s/articles.pkl does not exist.' % directory)
         else:
-            print('Importing articles from %s/%s/articles.pkl' % directory)
+            print('Importing articles from %s/%s/articles.pkl.' % directory)
             self.docs[lang] = pickle.load(open('%s/%s/articles.pkl' % directory, 'rb'))
 
     def calculate(self, model, lang, directory):
         if model == 'baa':
-            print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Text')
+            print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Text.')
             
             for index, doc in enumerate(self.docs[lang]):
                 d_tokens = processing.tokenize(lang, doc[1])
@@ -131,7 +136,7 @@ class MulLingVectorsAnnoy:
                 print('IDFs calculated')
 
             # Second pass
-            print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Article Text')
+            print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Article Text.')
             for index, doc in enumerate(self.docs[lang]):
                 d_tokens = processing.tokenize(lang, doc[1])
                 d_tokens_count = dict(Counter(list(d_tokens)))
@@ -146,7 +151,7 @@ class MulLingVectorsAnnoy:
                     self.docvecs[model][lang].add_item(index, vecs)
 
         if model == 'meta':
-            print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Title')            
+            print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Title.')            
             for index, doc in enumerate(self.docs[lang]):
                 t_tokens = processing.tokenize(lang, doc[0])
                 t_tokens_vecs = []
@@ -160,7 +165,7 @@ class MulLingVectorsAnnoy:
                     self.docvecs[model][lang].add_item(index, vecs)
 
         if model == 'laser':
-            print('Calculating document vectors using LASER Sentence Embeddings  on Article Text')
+            print('Calculating document vectors using LASER Sentence Embeddings  on Article Text.')
             bigtext = []
             for doc in self.docs[lang]:
                 text = doc[1].replace('\n', ' ')
@@ -172,7 +177,7 @@ class MulLingVectorsAnnoy:
                 self.docvecs[model][lang].add_item(index, vecs)
 
         if model == 'metalaser':
-            print('Calculating document vectors using LASER Sentence Embeddings on Article Titles')
+            print('Calculating document vectors using LASER Sentence Embeddings on Article Titles.')
             bigtext = []
             for doc in self.docs[lang]:
                 text = doc[0].replace('\n', ' ')
@@ -184,20 +189,22 @@ class MulLingVectorsAnnoy:
                 self.docvecs[model][lang].add_item(index, vec)
 
         if model == 'senlaser':
-            print('Calculating document vectors using LASER Sentence Embeddings on Individual Sentences in Article')
+            print('Calculating document vectors using LASER Sentence Embeddings on Individual Sentences in Article.')
             self.s2d[model][lang] = []
             count = 0
-            
+            bigtext = []
             for index, doc in enumerate(self.docs[lang]):
-                if lang == 'zh':
-                    sens = '\n'.join(list(processing.zh_sent_tokenize(doc[1])))
-                else:
-                    sens = '\n'.join(sent_tokenize(doc[1]))
-                vecs = LASER.get_vect(sens, lang=lang if lang == 'ta' else 'en')
-                for vec in vecs:
-                    self.docvecs[model][lang].add_item(count, vec)
+                sens = list(processing.zh_sent_tokenize(doc[1])) if lang == 'zh' else list(sent_tokenize(doc[1]))
+                bigtext += sens
+                for _ in sens:
                     self.s2d[model][lang].append(index)
-                    count += 1
+
+                if index%100 == 99 or index==len(self.docs[lang]):
+                    vecs = LASER.get_vect('\n'.join(bigtext), lang=lang if lang == 'ta' else 'en')
+                    for vec in vecs:
+                        self.docvecs[model][lang].add_item(count, vec)
+                        count += 1
+                    bigtext = []
             pickle.dump(self.s2d[model][lang], open('%s/%s/s2d%s.pkl' % directory,'wb'))
 
         if model == 'senbai':
@@ -205,7 +212,7 @@ class MulLingVectorsAnnoy:
             count = 0
 
             # First pass
-            if self.idfs:
+            if lang in self.idfs:
                 print('IDFs already loaded')
             elif os.path.isfile('%s/pickle/idfs.pkl' % self.path):
                 self.idfs = pickle.load( open('%s/pickle/idfs.pkl' % self.path, 'rb'))
@@ -226,7 +233,7 @@ class MulLingVectorsAnnoy:
                 print('IDFs calculated')
 
             # Second pass
-            print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Individual Sentences in Article')
+            print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Individual Sentences in Article.')
             for index, doc in enumerate(self.docs[lang]):
                 sens = sent_tokenize(doc[1]) if lang!='zh' else list(processing.zh_sent_tokenize(doc[1]))
                 for sentence in sens:
@@ -249,4 +256,4 @@ class MulLingVectorsAnnoy:
 
         self.docvecs[model][lang].build(math.floor(math.log(len(self.docs[lang]))))
         self.docvecs[model][lang].save('%s/%s/%s.ann' % directory)
-        print('Annoy Index is saved and loaded in %s for %s model and %s lang saved and loaded!' % directory)
+        print('Annoy Index is saved and loaded in %s for %s lang and %s model saved and loaded!' % directory)

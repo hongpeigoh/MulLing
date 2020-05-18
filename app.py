@@ -1,12 +1,14 @@
 from mulling import MulLingVectorsAnnoy
 from src import get, processing, query
+from pkgs.WMD import wmdsimilarity
+from pkgs.FastText import FastVectorExport
 
 import os.path
 import math
 from csv import writer
 
 import json
-from flask import Flask, request, jsonify, url_for, render_template, redirect
+from flask import Flask, request, jsonify, url_for, render_template, redirect, send_file
 from flask_cors import CORS, cross_origin
 from flask_wtf import FlaskForm
 from wtforms import StringField, SelectField, SubmitField, TextAreaField
@@ -74,7 +76,7 @@ def appquery():
     results = query.monolingual_annoy_query(app_object, q, model, lang, k, clustering=True)
 
     return jsonify(
-        allresults= list(get.json(app_object, results, model))
+        allresults = list(get.json(app_object, results, model))
     )
 
 @app.route('/query_multi')
@@ -107,13 +109,61 @@ def multiappquery():
         results = query.mulling_annoy_query(app_object, q, model, k, L=L, normalize_top_L=normalize, multilingual=False, lang_= lang, olangs=olangs, clustering=True)
 
     return jsonify(
-        allresults= list(get.json(app_object, results, model))
+        allresults = list(get.json(app_object, results, model))
     )
 
+
+@app.route('/fasttext', methods=['GET','POST'])
+@cross_origin()
+def fasttext():
+    lang = str(request.args.get('lang'))
+    print('Language:           : %s\n' % lang )
+
+    if not os.path.isdir('./dump/%s' % lang):
+        path = os.path.join('./dump', '%s' % lang)
+        os.mkdir(path)
+    FastVectorExport(lang, outpath='./dump/%s/new_wordvecs.txt'%lang, vector_file='./dump/numberbatch-19.08.txt.gz')
+
+    return send_file('./dump/%s/new_wordvecs.txt'%lang, as_attachment=True)
+
+@app.route('/tokenize')
+@cross_origin()
+def tokenize():
+    doc = str(request.args.get('doc'))
+    lang = str(request.args.get('lang'))
+    include_stopwords = str(request.args.get('includestopwords'))
+    print('   Phrase 1:           : %s\n   Language:           : %s\n   Include Stopwords   : %s\n' %(doc, lang, include_stopwords))
+
+    results = list(processing.tokenize(lang, doc, include_stopwords))
+
+    return jsonify(
+        tokens = results
+    )
+
+@app.route('/wmd')
+@cross_origin()
+def wmd():
+    doc1 = str(request.args.get('doc1'))
+    doc2 = str(request.args.get('doc2'))
+    lang1 = str(request.args.get('lang1'))
+    lang2 = str(request.args.get('lang2'))
+    print('   Phrase 1 and Language:           : %s, %s\n   Phrase 2 and Language:           : %s, %s\n' %(doc1, lang1, doc2, lang2))
+
+    results = wmdsimilarity(doc1, doc2, lang1, lang2, app_object.vecs, with_flow=True)
+
+    return jsonify(
+        tokens = results['tokens'],
+        pdf1 = list(results['pdf1']),
+        pdf2 = list(results['pdf2']),
+        wmd = results['wmd'],
+        flow = results['flow']
+    )
+
+
 if __name__ == "__main__":
-    models = ['baa','bai','meta','laser','metalaser','senlaser','senbai']
+    models = ['baa','bai','meta','laser','metalaser']
     path = './dump'
-    langs = ['en','zh','ms','ta']
+    langs = []
 
     app_object = MulLingVectorsAnnoy(models=models, path=path, langs=langs)
     app.run(port=5050, host='0.0.0.0', debug=False)

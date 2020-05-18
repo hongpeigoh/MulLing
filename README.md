@@ -58,59 +58,37 @@ To run the notebook on the given* data-set, these requirements are necessary:
 
 # Get pre-calculated evaluation datasets and monolingual word embeddings
 
-We obtain aligned multilingual word embeddings from Conceptnet's Numberbatch ([https://github.com/commonsense/conceptnet-numberbatch](https://github.com/commonsense/conceptnet-numberbatch)). These are sorted in a singular vector space. A crawler will be necessary to process the file to extract tokens of a particular language. An edited code sample by Facebook's Fasttext team shown below may be used.
+We obtain aligned multilingual word embeddings from Conceptnet's Numberbatch ([https://github.com/commonsense/conceptnet-numberbatch](https://github.com/commonsense/conceptnet-numberbatch)). These are sorted in a singular vector space. A crawler will be necessary to process the file to extract tokens of a particular language. You may use our crawler on either our dashboard's sandbox or the code below.
 
 ```
-import gzip
-
-class FastVector:
-    def __init__(self, vector_file='', outpath = ''):
-        self.word2id = {}
-        self.id2word = []
-
-        print('Reading word vectors from %s' % vector_file)
-        with gzip.open(vector_file, 'rt', encoding="utf8") as f:
-            (self.n_words, self.n_dim) = \
-                (int(x) for x in f.readline().rstrip('\n').split(' '))
-            self.embed = np.zeros((_____, self.n_dim))
-            k=0
-            for i, line in enumerate(f):
-                elems = line.rstrip('\n').split(' ')
-                if elems[0][3:5] == "ta":
-                    self.word2id[elems[0][6:]] = k
-                    self.embed[k] = elems[1:self.n_dim+1]
-                    self.id2word.append(elems[0][6:])
-                    k+=1
-        self.export(outpath)
-    
-    def export(self, outpath):
-        fout = open(outpath, "w", encoding="utf8")
-        fout.write(str(_____) + " " + str(self.n_dim) + "\n")
-        for token in self.id2word:
-            vector_components = ["%.6f" % number for number in self[token]]
-            vector_as_string = " ".join(vector_components)
-
-            out_line = token + " " + vector_as_string + "\n"
-            fout.write(out_line)
-        fout.close()
-
-if __name__ == '__main__':
-    lang_dictionary = FastVector(vector_file='numberbatch-19.08.txt.gz', outpath='wordvecs.txt')
+$ cd MulLing
+$ cd dump
+$ wget https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-19.08.txt.gz
+$ cd ..
+$ python pkgs/FastText.py --lang en --data_dir dump
 ```
 
 If you wish to train an aligned monolingual word embedding yourself, please refer to MUSE's github to learn how Procrustes Alignment may be used effectively. Since this is a multilingual task and not a crosslingual task, Procrustes Refinment should be avoided (i.e. `--n_refinement 0`) as both the source and target space are being edited.
 
 Should you wish to evaluate the current methods, the corpora used are provided below. A pre-calculated version of the test set is also included should the computation be too demanding for your system.
 
-### Necessary Data (to be added)
+### Data
 
-| Language      | Articles | Word vectors | Stopwords | Doc-vecs (BAA) | Doc-vecs (BAI) | Doc-vecs (LASER) | Doc-vecs (meta-LASER) |
-| ------------- | -------- | ------------ | --------- | -------------- | -------------- | ---------------- | --------------------- |
-| English (en)  | Link     | Link         | N.A.      | Link           | Link           | Link             | Link                  |
-| Mandarin (zh) | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
-| Malay (ms)    | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
-| Tamil (ta)    | Link     | Link         | Link      | Link           | Link           | Link             | Link                  |
-   
+To install the data, please access the Google Cloud Bucket as shown. If your root folder is the MulLing directory, the MulLing path will be '.'.
+
+```
+# Set-up Google Cloud SDK and GS Util and log-in to service account through JSON object
+$ pip install gcloud gsutil
+$ curl -L -o mulling.json "https://docs.google.com/uc?export=download&id=1NtxO4I0aGH7asIWou_VfauogEfq4EdOu"
+$ gcloud auth activate-service-account --key-file mulling.json
+
+# To use the pre-processed data
+$ gsutil -m cp -r gs://mulling/030420/dump $MULLING_PATH$
+
+# To use only the base word vectors and iso-stopwords lists
+$ gsutil -m cp -r gs://mulling/200420 $MULLING_PATH$
+$ mv 200420 dump
+```
 
 # Pre-processing
 
