@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import { Switch, Route, BrowserRouter } from 'react-router-dom';
 import { Ripple } from '@progress/kendo-react-ripple';
+import { Button } from '@progress/kendo-react-buttons';
 
 import { About, AboutHead } from './components/about'
 import { Home, HomeHead } from './components/home'
@@ -30,6 +31,7 @@ class App extends Component {
       this.setState({
         WidgetToggle: !this.state.WidgetToggle
       });
+      document.getElementById('banner').style.display = 'none'
     }
   }
   handler() {
@@ -53,6 +55,10 @@ class App extends Component {
             <HeaderMain />
             { this.state.WidgetToggle ? <PopupWidget handler={this.handler}/> : null }
             <Main />
+            <div className='banner' id='banner'>
+              <div className="col-10">Try out our Tokenizer and Word Movers' Distance widget using F7!</div>
+              <div className="col-2 right"><Button icon="close" onClick={()=>document.getElementById('banner').style.display = 'none'}/></div>
+            </div>
           </div>
         </BrowserRouter>
       </Ripple>  
