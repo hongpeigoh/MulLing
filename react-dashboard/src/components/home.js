@@ -127,7 +127,7 @@ class Form extends Component {
     const encodedquery = encodeURIComponent(this.textInput.current.value)
     const queryaddress = "http://localhost:5050/query_" + monolingual + "?q="+ encodedquery + "&model=" + this.state.model + "&lang=" + this.state.lang + "&k=" + this.state.k + suffix
 
-    console.log(queryaddress);
+    //console.log(queryaddress);
 
     // Styling
     ReactDOM.render([
@@ -157,18 +157,18 @@ class Form extends Component {
         for (const result of myResults){
           var fields = {
             rank: result[0],
-            title: result[3],
-            article: result[4],
-            bestsentence: (result.length === 6 ? result[5] : null),
+            title: result[4],
+            article: result[5],
+            bestsentence: (result.length === 7 ? result[6] : null),
           };
           if ( MainChildren[result[2]].length === 0 ){
-            MainChildren[result[2]].push(<span><div className="row"><h2>Cluster {parseInt(result[2],10)+1}:</h2></div></span>);
-            MainChildren[result[2]].push(<Snippet key={String(fields.rank)} fields={fields} clust={true} isClust={false}/>);
+            MainChildren[result[2]].push(<Keywords key={'clushead'} fields={{keywords: result[3].split(','), cluster_num: parseInt(result[2],10)+1}}/>);
+            MainChildren[result[2]].push(<Snippet key={'clus'+String(fields.rank)} fields={fields} clust={true} isClust={false}/>);
           } else {
-            if ( MainChildren[result[2]].length === 2 ){MainChildren[result[2]].push(<span><div className="row">Similar Results:</div></span>);}
-            MainChildren[result[2]].push(<Snippet key={String(fields.rank)} fields={fields} clust={true} isClust={self.state.isClust}/>);
+            if ( MainChildren[result[2]].length === 2 ){MainChildren[result[2]].push(<span key={'clussim'}><div className="row">Similar Results:</div></span>);}
+            MainChildren[result[2]].push(<Snippet key={'clus'+String(fields.rank)} fields={fields} clust={true} isClust={self.state.isClust}/>);
           }
-          UnclusChildren.push(<Snippet key={String(fields.rank)} fields={fields} clust={false} isClust={self.state.isClust}/>);
+          UnclusChildren.push(<Snippet key={'unclus'+String(fields.rank)} fields={fields} clust={false} isClust={self.state.isClust}/>);
         }
 
         ReactDOM.render(PreChildren.concat(UnclusChildren) , document.getElementById('input-to-results'));
@@ -319,6 +319,20 @@ class Form extends Component {
   }
 }
 
+function Keywords(props) {
+  var Children = []
+  for (const i in props.fields.keywords) {
+    Children.push(<span key={"keyword"+String(i)} className="token">{props.fields.keywords[i].replace(/_/g, " ")}</span>)
+  }
+  return(
+    <span className="result-head"><div className="row">
+      <h2>Cluster {props.fields.cluster_num}:</h2>
+    </div>
+    <div className="row">
+      <span style={{paddingTop: '10px'}}>Keywords: </span>{Children}
+    </div></span>
+  );
+}
 
 function Snippet(props) {
   const toggletext =
@@ -339,6 +353,42 @@ function Snippet(props) {
     changeResult.innerHTML = '<p>' + changeResult.innerText + '</p>';
   }, [display, props.fields.rank, props.clust]);
   
+  const holdTime = 500;
+  const holdDistance = 3**2;
+  const [timer, setTimer] = React.useState(null);
+  const [pos, setPos] = React.useState([0,0]);
+
+  function onPointerDown(evt) {
+    setPos([evt.clientX, evt.clientY]);
+    const event = { ...evt };
+    const timeoutId = window.setTimeout(timesup.bind(null, event), holdTime);
+    setTimer(timeoutId);
+  };
+
+  function onPointerUp(evt) {
+    if (timer) {
+      window.clearTimeout(timer);
+      setTimer(null);
+      setDisplay(1-display);
+    };
+  };
+
+  function onPointerMove(evt) {
+    // cancel hold operation if moved too much
+    if (timer) {
+      const d = (evt.clientX - pos[0])**2 + (evt.clientY - pos[1])**2;
+      if (d > holdDistance) {
+        setTimer(null); 
+        window.clearTimeout(timer);
+      };
+    };
+  };
+
+  function timesup(evt) {
+    setTimer(null);
+  }
+
+
   return(
     ( props.clust && props.isClust && toggleMinimise ?
     <span className="result" onMouseEnter={() => setIsShown(true)} onMouseLeave={() => setIsShown(false)}>
@@ -348,7 +398,13 @@ function Snippet(props) {
           onClick={()=>setToggleMinimise(!toggleMinimise)}>
           {props.fields.title}</button></small>
       </div>
-      <div className="row search-result" id={"search-result-" + props.fields.rank + props.clust} onClick={()=>setDisplay(1-display)} style={{display: "none"}}>
+      <div
+        className="row search-result"
+        id={"search-result-" + props.fields.rank + props.clust}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerMove={onPointerMove}
+        style={{display: "none"}}>
       </div>
       
     </span>
@@ -379,7 +435,12 @@ function Snippet(props) {
           href={ddg_link}>
           {(ddg_link.length >= 90 ? ddg_link.substring(0,90) + '...' : ddg_link)}</a></h5>
       </div>
-      <div className="row search-result" id={"search-result-" + props.fields.rank + props.clust} onClick={()=>setDisplay(1-display)}>
+      <div
+        className="row search-result"
+        id={"search-result-" + props.fields.rank + props.clust}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerMove={onPointerMove}>
         {toggletext[display]}
       </div>
       <div className="row">

@@ -116,7 +116,6 @@ class FastVector extends Component {
             ReactDOM.render(<Loading/>, document.getElementById('results'));
             if (xhttp.readyState === 4 && xhttp.status === 200){
                 var Children = [<div className="center"><Button primary={true} disabled={true}>Download Started</Button></div>];
-                console.log(this.response)
                 ReactDOM.render(Children, document.getElementById('results'));
             } else if (xhttp.status === 500){
                 var EChildren = [<div className="center"><Button disabled={true} look="flat">Error, please reload and try again.</Button></div>];
@@ -206,7 +205,8 @@ class Tokenize extends Component {
     handleSubmit(e) {
         e.preventDefault();
         var self = this;
-        const queryaddress = "http://localhost:5050/tokenize?doc=" + this.textInput.current.value + "&lang=" + this.state.lang + "&includestopwords=" + this.state.include_stopwords
+        const queryaddress = "http://localhost:5050/tokenize?doc=" + encodeURIComponent(this.textInput.current.value) + "&lang=" + this.state.lang + "&includestopwords=" + this.state.include_stopwords;
+        console.log(queryaddress);
         var xhttp = new XMLHttpRequest();
         xhttp.onreadystatechange = function() {  
             ReactDOM.render(<Loading/>, document.getElementById('results'));
@@ -229,13 +229,14 @@ class Tokenize extends Component {
         xhttp.send();
     }
     handleValueChange = (event) => {
+        console.log(event.target.props.name);
         if (event.target.props.name === "lang") {
             this.setState({
                 lang: event.target.value
             });
         } else if (event.target.props.name === "stopwords") {
             this.setState({
-                lang: event.target.value
+                include_stopwords: event.target.value
             });
         }
     };
@@ -261,24 +262,24 @@ class Tokenize extends Component {
                         <div className="col-6">
                             <h4 style={{paddingTop: "0.5vh"}}>Language: &nbsp;</h4>
                             <DropDownListWithValueField
-                                    name = "lang"
-                                    data = {this.langs}
-                                    textField = "text"
-                                    valueField = "id"
-                                    value = {this.state.lang}
-                                    onChange = {this.handleValueChange}
-                                    />
+                                name = "lang"
+                                data = {this.langs}
+                                textField = "text"
+                                valueField = "id"
+                                value = {this.state.lang}
+                                onChange = {this.handleValueChange}
+                                />
                         </div> 
                         <div className="col-6">  
                             <h4 style={{paddingTop: "0.5vh"}}>Stopwords: &nbsp;</h4>
                             <DropDownListWithValueField
-                                    name = "stopwords"
-                                    data = {this.stopword_bools}
-                                    textField = "text"
-                                    valueField = "id"
-                                    value = {this.state.include_stopwords}
-                                    onChange = {this.handleValueChange}
-                                    /> 
+                                name = "stopwords"
+                                data = {this.stopword_bools}
+                                textField = "text"
+                                valueField = "id"
+                                value = {this.state.include_stopwords}
+                                onChange = {this.handleValueChange}
+                                /> 
                         </div> 
                     </div>
                     <div className="row" id="results"/>
@@ -290,7 +291,7 @@ class Tokenize extends Component {
 
 function Snippet(props) {
     return(
-        <div className="col-2 black-border">{props.token}</div>
+        <span className="token">{props.token}</span>
     );
 }
 
@@ -314,7 +315,7 @@ class WMD extends Component {
     handleSubmit(e) {
         e.preventDefault();
         var self = this;
-        const queryaddress = "http://localhost:5050/wmd?doc1=" + this.textInput1.current.value + "&doc2=" + this.textInput2.current.value + "&lang1=" + this.state.lang1 + "&lang2=" + this.state.lang2;
+        const queryaddress = "http://localhost:5050/wmd?doc1=" + encodeURIComponent(this.textInput1.current.value) + "&doc2=" + encodeURIComponent(this.textInput2.current.value) + "&lang1=" + this.state.lang1 + "&lang2=" + this.state.lang2;
 
         var xhttp = new XMLHttpRequest();
         xhttp.onreadystatechange = function() {  
@@ -350,11 +351,16 @@ class WMD extends Component {
                     return myResults.pdf2[index] !== 0
                 });
                 const flow = myResults.flow;
+                const matrix = myResults.dist_matrix;
                 var zValues = [];
+                var hovertext = []
 
                 for ( var i = 0; i < flow.length; i++ ) {
                     if ( myResults.pdf1[i] !== 0) {
                         zValues.push(flow[i].filter( (token, index) =>{
+                            return myResults.pdf2[index] !== 0
+                        }));
+                        hovertext.push(matrix[i].map(x => `Distance: ${x.toFixed(3)}`).filter( (token, index) =>{
                             return myResults.pdf2[index] !== 0
                         }));
 
@@ -383,6 +389,7 @@ class WMD extends Component {
                     x: xValues,
                     y: yValues,
                     z: zValues,
+                    text: hovertext,
                     type: 'heatmap',
                     colorscale: [[0, '#ffffff'], [1, '#0000aa']],
                     showscale: false
@@ -397,7 +404,7 @@ class WMD extends Component {
                 };
                 if (self.props.widget === true){
                     document.getElementById("wmd-form").style.display = "None";
-                    ReactDOM.render(<h4>Word Movers' Distance: {myResults.wmd.toFixed(4)}</h4>, document.getElementById('results'));
+                    ReactDOM.render(<PlotlyComponent className="sandbox-graph-small" data={data} layout={layout} config={config}/>, document.getElementById('results'));
                 } else {
                     ReactDOM.render(<PlotlyComponent className="sandbox-graph" data={data} layout={layout} config={config}/>, document.getElementById('results'));
                 }
@@ -461,7 +468,7 @@ class WMD extends Component {
                             <Button>Submit</Button>
                         </div>
                     </div>
-                    <div className="row" id="results"/>
+                    <div className="row center" id="results"/>
                 </form>
             </div>
         )
