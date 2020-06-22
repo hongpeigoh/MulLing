@@ -4,10 +4,17 @@ import numpy as np
 from nltk.tokenize import sent_tokenize
 from . import evaluate, processing
 
-# Get cosine similarity
 def cosine_sim(v1, v2):
+    """
+    Returns cosine similarity of vectors v1 and v2 (same dimensions)
+    """
     return np.dot(v1, v2)/(np.linalg.norm(v1)*np.linalg.norm(v2))
 
+
+
+"""
+Methods for parsing individual results
+"""
 # Get first item
 def item(tuple_):
     return tuple_[0]
@@ -24,13 +31,24 @@ def denormalizeditem(self, tuple_):
 def normalizedtopLitem(self, tuple_):
     return tuple_[0] / self.mean[tuple_[2]]
 
+
+
+"""
+Methods for parsing articles
+"""
 # Get article using the language (2nd element) and the article index (3rd element)
 def article(self, tuple_):
     return self.docs[tuple_[2]][tuple_[1]]
 
+# Print prettified article in Jupyter
 def printarticle(self, tuple_):
     print('\n\n\033[1m'+'\033[0m\n\n'.join(article(self, tuple_)))
 
+
+
+"""
+Methods for printing readable results
+"""
 # Get readable results of enumerated titles from a query:
 def results(self, query_results):
     for index, result in enumerate(query_results):
@@ -55,24 +73,25 @@ def sentence(self, result, model):
     else:
         return sent_tokenize(self.docs[result[2]][result[1]][1])[sennum]
 
-# Get parsed results for json flask
+# Get parsed results in json for flask container:
 def json(self, query_results, model):
     for index, result in enumerate(query_results):
         rank = str(index+1)
         score = str(result[0])
         clustering = str(result[4])
+        keywords = result[5]
         title = self.docs[result[2]][result[1]][0]
         text = self.docs[result[2]][result[1]][1]
         if result[3] >= 0:
             try:
                 best_sen = sentence(self, result, model)
-                yield ('\t'.join([rank, score, clustering, title, text, best_sen]))
+                yield ('\t'.join([rank, score, clustering, ','.join(keywords), title, text, best_sen]))
             except:
-                yield ('\t'.join([rank, score, clustering, title, text]))
+                yield ('\t'.join([rank, score, clustering, ','.join(keywords), title, text]))
         else:
-            yield ('\t'.join([rank, score, clustering, title, text]))
+            yield ('\t'.join([rank, score, clustering, ','.join(keywords), title, text]))
 
-# Get accuracy using evaluate.py
+# Get accuracy using evaluate.py:
 def accuracy(self, results, q, k, angular=True):
     precision = evaluate.evaluate_precision(self, results, angular=angular)
     recall = evaluate.evaluate_recall(self, results, q=q, k=k)

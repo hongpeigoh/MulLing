@@ -11,7 +11,7 @@ from IPython.display import display
 from . import processing, get, query
 from pkgs import LASER
 
-# Mean Square Cosine Similarity, only test for non KD-Tree queries.
+# Mean Square Cosine Similarity.
 def evaluate_precision(self, results, angular=True):
     if angular:
         return mean([(1 - (result[0]**2)/2)**2 for result in results])**0.5
@@ -21,9 +21,9 @@ def evaluate_precision(self, results, angular=True):
 # Half-L Recall
 def evaluate_recall(self, results, q, k, L=-1):
     if L == -1:
-        L = k//4
+        L = k//len(self.langs) + 1
     list1 = [(result[1], result[2]) for result in results]
-    list2 = [(result[1], result[2]) for result in query.mulling_annoy_query(self, q, 'bai', k=4*k, L=4*L)]
+    list2 = [(result[1], result[2]) for result in query.mulling_annoy_query(self, q, 'bai', k=len(self.langs)*k, L=len(self.langs)*L)]
     return len(set(list1).intersection(set(list2)))/len(list1)
 
 def cossim(v1, v2):

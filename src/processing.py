@@ -16,7 +16,7 @@ langs = ['en','zh','ms','ta']
 for lang in langs:
     if lang == 'zh':
         f = codecs.open('dump/{}/stopwords.txt'.format(lang), encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-zh
-        stopwords[lang] = [str(line)[0] for line in f][1:]
+        stopwords[lang] = [line.rstrip('\r\n') for line in f][1:]
         f.close()
     elif lang == 'ms':
         f = codecs.open('dump/{}/stopwords.txt'.format(lang), encoding='utf-8')    # https://github.com/stopwords-iso/stopwords-ms
@@ -29,6 +29,21 @@ for lang in langs:
 
 # Tokenizes Input
 def tokenize(lang, input, include_stopwords=False):
+    """
+    Tokenizes input with given language
+    --------------------
+    lang: str
+    Target input language, selected from one of langs
+    --------------------
+    input: str
+    Target input phrase/query/document
+    --------------------
+    include_stopwords: bool
+    Returns stopword tokens if True
+    --------------------
+    Returns:
+    <generator> object of all tokens that can be embedding into a list for better manipulation
+    """
     if lang == 'en':
         d = nlp_en(input.replace('\n', ' '))
         if not include_stopwords:
@@ -52,6 +67,18 @@ def tokenize(lang, input, include_stopwords=False):
             return filter(lambda x: (x not in string.punctuation), d_tokens)
 
 def vectorize(self, input_, include_stopwords=True):
+    """
+    Vectorizes input with NO given language
+    --------------------
+    input_: str
+    Target input phrase/query/document
+    --------------------
+    include_stopwords: bool
+    Returns stopword tokens if True
+    --------------------
+    Returns:
+    300 dimension word vector
+    """
     Q, tokens, token_vecs = dict(), dict(), list()
     # To tokenize and add spaces to Chinese text in multilingual query
     for word in input_.split():
@@ -80,6 +107,25 @@ def vectorize(self, input_, include_stopwords=True):
     return sum(np.array(vec) for vec in token_vecs)
 
 def vectorize_lang(self, input_, lang, include_stopwords=True, raise_error=True):
+    """
+    Vectorizes input with given language
+    --------------------
+    input_: str
+    Target input phrase/query/document
+    --------------------
+    lang: str
+    Target input language, selected from one of langs
+    --------------------
+    include_stopwords: bool
+    Returns stopword tokens if True
+    --------------------
+    raise_error: bool
+    Raises Key Error if corpora contains words not in Fasttext word vectors dictionary.
+    Preferably False for calculation and app version and True for debugging.
+    --------------------
+    Returns:
+    300 dimension word vector
+    """
     tokens = tokenize(lang, input_, include_stopwords=include_stopwords)
     tokens_vecs = []
     for token in list(tokens):
@@ -93,5 +139,14 @@ def vectorize_lang(self, input_, lang, include_stopwords=True, raise_error=True)
     return sum(np.array(vec) for vec in tokens_vecs)
 
 def zh_sent_tokenize(paragraph):
+    """
+    Simple module to tokenize sentences in Chinese.
+    --------------------
+    paragraph: str
+    Paragraph in Chinese.
+    --------------------
+    Returns:
+    <generator> object of sentences.
+    """
     for sent in re.findall(r'[^!?。\.\!\?]+[!?。\.\!\?]?', paragraph, flags=re.U):
         yield sent

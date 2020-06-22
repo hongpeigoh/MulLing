@@ -5,6 +5,37 @@ from pkgs import LASER
 from sklearn.cluster import MeanShift
 
 def monolingual_annoy_query(self, q, model, lang, k, clustering=False):
+    """
+    Monolingual/Multilingual Query
+    --------------------
+    q: str
+    Input Query
+    --------------------
+    model: str
+    One of the initialised models in MulLingVectorsAnnoy() class. See ../mulling.py for more.
+    --------------------
+    lang: str
+    Language of input query
+    --------------------
+    k: int
+    Number of results to generate
+    --------------------
+    clustering: bool
+    Returns results with clusters and most similar keywords by cosine similarity and idfs if true
+    --------------------
+    Returns:
+    <generator> of k tuples each in the form of:
+    1. cosine_similarity a.k.a. angular distance
+    2. article_index (queried by MulLingVectorsAnnoy().docs[lang][ai]); or
+       sentence_index for sentence models (queried by MulLingVectorsAnnoy().docs[lang][ai] where ai = MulLingVectorsAnnoy().s2d[model][lang][si])
+    3. language of returned tuple
+    4. clustering_labels.
+       = -1 for queries without clustering
+       = int for queries with clustering. Result tuples in the same cluster share the same clustering_labels, starting from 0.
+    5. cluster_keywords
+       top 5 most frequently used words among top 20 most similar words for each cluster center
+
+    """
     # Vectorize query
     q_vecs = LASER.get_vect(q)[0] if 'laser' in model else processing.vectorize_lang(self, q, lang) 
     
@@ -12,23 +43,44 @@ def monolingual_annoy_query(self, q, model, lang, k, clustering=False):
     if not clustering:
         if 'sen' in model:
             for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
-                yield (cs, self.s2d[model][lang][si], lang, si)
+                yield (cs, self.s2d[model][lang][si], lang, si, -1)
         else:
             for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))):
                 yield (cs, ai, lang, -1)
     else:
         if 'sen' in model:
-            tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True)))) if 'sen' in model else list((cs, ai, lang) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+            tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
         else:
             tmp = list([cs, ai, lang, -1] for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
         vecs = np.array([self.docvecs[model][result[2]].get_item_vector(result[1]) for result in tmp])
+        # Mean Shift Clusters
         clustering = MeanShift().fit(vecs)
+        if 'annoy/%s'%lang in self.vecs:
+            keywords = []
+            for cc in clustering.cluster_centers_:
+                keywords.append(sorted( list(self.vecs[lang].id2word[wi] for wi in self.vecs['annoy/%s'%lang].get_nns_by_vector(cc, 20)), key=lambda x: self.idfs[lang][x])[:5])
         for i in range(k):
-            yield tuple(tmp[i] + [clustering.labels_[i]])
+            yield tuple(tmp[i] + [clustering.labels_[i], keywords[clustering.labels_[i]]])
             
 
 
 def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multilingual=True, lang_='en', olangs= None, clustering=False):
+    """
+    Refer to above for key variables and tuples returned
+    --------------------
+    L: int
+    Maximum number of results to generate for any given output language. Set to -1 if no criteria.
+    --------------------
+    normalize_top_L: bool
+    Returns results sorted weighing aginst the average cosine similarity of results in each output language
+    --------------------
+    multilingual: bool, and lang_:str
+    multilingual should be set to true if the input query is of an unknown language/dual language and
+    lang_ should be set to the input query's language if known and closest language among initialised languages (See ../mulling.py) otherwise.
+    --------------------
+    olangs: list(str)
+    List of languages to be included in output, should be a subset of initialised languages.
+    """
     if L == -1:
         L = k
     elif k> len(self.langs)*L:
@@ -52,10 +104,25 @@ def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multiling
     # Find results
     results = list()
     for lang in olangs:
-        if 'sen' in model:
-            results += list((cs, self.s2d[model][lang][si], lang, si) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, k, include_distances=True))))
+        if not clustering:
+            if 'sen' in model:
+                results += list((cs, self.s2d[model][lang][si], lang, si) for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+            else:
+                results += list((cs, ai, lang, -1) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
         else:
-            results += list((cs, ai, lang, -1) for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+            if 'sen' in model:
+                tmp = list([cs, self.s2d[model][lang][si], lang, si] for si, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+            else:
+                tmp = list([cs, ai, lang, -1] for ai, cs in list(zip(*self.docvecs[model][lang].get_nns_by_vector(q_vecs, L, include_distances=True))))
+            vecs = np.array([self.docvecs[model][result[2]].get_item_vector(result[1]) for result in tmp])
+            # Mean Shift Clusters
+            clustering = MeanShift().fit(vecs)
+            if 'annoy/en' in self.vecs:
+                keywords = []
+                for cc in clustering.cluster_centers_:
+                    keywords.append(sorted( list(self.vecs['en'].id2word[wi] for wi in self.vecs['annoy/en'].get_nns_by_vector(cc, 20)), key=lambda x: self.idfs['en'][x])[:5])
+            for i in range(L):
+                results.append(tuple(tmp[i] + [clustering.labels_[i], keywords[clustering.labels_[i]]]))
         self.mean[lang] = statistics.mean([results[-i-1][0] for i in range(L)])
 
     # Return results in ranked list
@@ -67,6 +134,10 @@ def mulling_annoy_query(self, q, model, k, L=-1, normalize_top_L=True, multiling
 
 
 def ensemble_query(self, ensemble, q, k, lang='en', L=-1, normalize_top_L = True, multilingual = True):
+    """
+    Query for testing ensemble of models. Mostly deprecated due to long runtime.
+    Refer to above for variables and returned tuples (no clustering).
+    """
     if L == -1:
         L = k
     elif k> len(self.langs)*L:
