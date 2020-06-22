@@ -20,9 +20,10 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 secret_key = 'cs1tmu11ing'
 app.config['SECRET_KEY'] = secret_key 
 
-
-''' APP '''
 class FeedbackForm(FlaskForm):
+    """
+    Feedback Form Class.
+    """
     name = StringField('Name',[DataRequired()])
     email = StringField('Email',[Email(message=('Not a valid email address.')), DataRequired()])
     data_type = SelectField('Feedback Type',[DataRequired()],
@@ -37,11 +38,19 @@ class FeedbackForm(FlaskForm):
 
 @app.route('/')
 def approot():
+    """
+    Index page for Debug.
+    """
     return r"<strong>Hello World!</strong>"
 
 @app.route('/feedback', methods=['GET','POST'])
 @cross_origin()
 def feedbackform():
+    """
+    Feedback Form. CSS by Aigars Silkalns.
+    - GET: Receive empty feedback form
+    - POST: Validates feedback form data and returns success page if validated and feedback form with warnings otherwise.
+    """
     form = FeedbackForm()
     if form.validate_on_submit():
         row_content = [str(form.name.data),str(form.email.data),str(form.data_type.data),str(form.feedback.data)]
@@ -63,6 +72,9 @@ def feedbackform():
 @app.route('/query_mono')
 @cross_origin()
 def appquery():
+    """
+    Route for entering Monolingual Query. If implementing, remember to encode query as URI to minimise risk of injection.
+    """
     q = str(request.args.get('q'))
     model = str(request.args.get('model'))
     lang = str(request.args.get('lang'))
@@ -82,6 +94,9 @@ def appquery():
 @app.route('/query_multi')
 @cross_origin()
 def multiappquery():
+    """
+    Route for entering Multilingual Query.
+    """
     q = str(request.args.get('q'))
     model = str(request.args.get('model'))
     lang = str(request.args.get('lang'))
@@ -116,6 +131,9 @@ def multiappquery():
 @app.route('/fasttext', methods=['GET','POST'])
 @cross_origin()
 def fasttext():
+    """
+    Route for extracting Fasttext vectors of specific language.
+    """
     lang = str(request.args.get('lang'))
     print('Language:           : %s\n' % lang )
 
@@ -129,12 +147,15 @@ def fasttext():
 @app.route('/tokenize')
 @cross_origin()
 def tokenize():
+    """
+    Fast tokenizer.
+    """
     doc = str(request.args.get('doc'))
     lang = str(request.args.get('lang'))
-    include_stopwords = str(request.args.get('includestopwords'))
+    include_stopwords = True if str(request.args.get('includestopwords')) == 'true' else False
     print('   Phrase 1:           : %s\n   Language:           : %s\n   Include Stopwords   : %s\n' %(doc, lang, include_stopwords))
 
-    results = list(processing.tokenize(lang, doc, include_stopwords))
+    results = list(processing.tokenize(lang, doc, include_stopwords=include_stopwords))
 
     return jsonify(
         tokens = results
@@ -143,6 +164,9 @@ def tokenize():
 @app.route('/wmd')
 @cross_origin()
 def wmd():
+    """
+    Calculates Word Movers' Distance between two phrases.
+    """
     doc1 = str(request.args.get('doc1'))
     doc2 = str(request.args.get('doc2'))
     lang1 = str(request.args.get('lang1'))
@@ -156,14 +180,16 @@ def wmd():
         pdf1 = list(results['pdf1']),
         pdf2 = list(results['pdf2']),
         wmd = results['wmd'],
-        flow = results['flow']
+        flow = results['flow'],
+        dist_matrix = results['dist_matrix']
     )
 
 
 if __name__ == "__main__":
     models = ['baa','bai','meta','laser','metalaser']
     path = './dump'
-    langs = []
+    langs = ['en','zh']
+    wordvecs_as_annoy = True
 
-    app_object = MulLingVectorsAnnoy(models=models, path=path, langs=langs)
+    app_object = MulLingVectorsAnnoy(models=models, path=path, langs=langs, wordvecs_as_annoy = wordvecs_as_annoy)
     app.run(port=5050, host='0.0.0.0', debug=False)

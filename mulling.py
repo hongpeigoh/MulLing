@@ -15,11 +15,13 @@ class MulLingVectorsAnnoy:
     def __init__(
             self,
             models = ['baa', 'bai', 'meta', 'laser', 'metalaser', 'senlaser', 'senbai'],
-            path = './dump',
-            langs= ['en', 'zh', 'ms', 'ta']):
+            path   = './dump',
+            langs  = ['en', 'zh', 'ms', 'ta'],
+            wordvecs_as_annoy = False):
         """
-        Models
+        Initialises dataclass and models.
         --------------------
+        Models: list(str)
         Model 1: BWE-Agg-Add on Article Text(baa)
         Model 2: BWE-Agg-IDF on Article Text (bai)
         Model 3: LASER Sentence Embeddings on Article Text (laser)
@@ -28,11 +30,18 @@ class MulLingVectorsAnnoy:
         Model 6: BWE-Agg-Add on Article Title (meta)
         Model 7: BWE-Agg-IDF on Article Sentences
         --------------------
-        Implemented Languages:
+        Path: str
+        Specify the path of the data file. Default: './dump'
+        --------------------
+        Implemented Languages: list(str)
         - English (en)
         - Simplified Chinese (zh)
         - Bahasa Melayu (ms)
         - Tamil (ta)
+        --------------------
+        Wordvecs as Annoy: bool
+        Specify whether to load word vectors as Annoy Index. Default: False.
+        Typically true for models involving clustering, such as the flask version.
         """
         self.path = path
         self.langs = langs
@@ -51,55 +60,99 @@ class MulLingVectorsAnnoy:
 
         for lang in self.langs:
             # Load word vectors and document corpora
-            self.load(lang)
+            self.load(lang, wordvecs_as_annoy=wordvecs_as_annoy)
             print('Language dependencies loaded.')
 
             for model in models:
                 dim = 1024 if 'laser' in model else 300
-                directory = (self.path, lang, model)
 
                 # Load Annoy Index
                 self.docvecs[model][lang] = AnnoyIndex(dim, 'angular')
-                if os.path.isfile('%s/%s/%s.ann' % directory):
-                    if 'sen' in model and os.path.isfile('%s/%s/s2d%s.pkl' % directory):
-                        self.s2d[model][lang] = pickle.load( open('%s/%s/s2d%s.pkl' % directory,'rb'))
-                        print('Loading sentence to document index from %s/%s/s2d%s.pkl.' % directory)
-                    self.docvecs[model][lang].load('%s/%s/%s.ann' % directory)
-                    print('Loading document vectors from %s/%s/%s.ann.' % directory)
+                if os.path.isfile('%s/%s/%s.ann' % (self.path, lang, model)):
+                    if 'sen' in model and os.path.isfile('%s/%s/s2d%s.pkl' % (self.path, lang, model)):
+                        self.s2d[model][lang] = pickle.load( open('%s/%s/s2d%s.pkl' % (self.path, lang, model),'rb'))
+                        print('Loading sentence to document index from %s/%s/s2d%s.pkl.' % (self.path, lang, model))
+                    self.docvecs[model][lang].load('%s/%s/%s.ann' % (self.path, lang, model))
+                    print('Loading document vectors from %s/%s/%s.ann.' % (self.path, lang, model))
 
                 # Calculate Annoy Index
                 else:
                     print('Saved annoy index not found, calculating from scratch.')
-                    self.calculate(model, lang, directory)
+                    self.calculate(model, lang, (self.path, lang, model))
 
         # Clear memory
-        if not os.path.isfile('%s/pickle/idfs.pkl' % self.path) :
-            pickle.dump( self.idfs, open('%s/pickle/idfs.pkl' % self.path, 'wb'))
-        print('IDFs saved at %s/pickle/idfs.pkl' % self.path)
-        self.idfs = {}
+        #self.idfs = {}
 
         print('All models are loaded.')
         
-    def load(self, lang):
-        directory = (self.path, lang)
+    def load(self, lang, wordvecs_as_annoy=False):
+        """
+        Loads necessary prerequisites for specific language.
+        --------------------
+        Language (to load): str
+        - English (en)
+        - Simplified Chinese (zh)
+        - Bahasa Melayu (ms)
+        - Tamil (ta)
+        --------------------
+        Wordvecs as Annoy: bool
+        Specify whether to load word vectors as Annoy Index. Default: False.
+        Typically true for models involving clustering, such as the flask version.
+        """
         # Loads aligned word vectors
-        if not os.path.isfile('%s/%s/wordvecs.txt' % directory):
-            raise IOError('File %s/%s/wordvecs.txt does not exist' % directory)
+        if not os.path.isfile('%s/%s/wordvecs.txt' % (self.path, lang)):
+            raise IOError('File %s/%s/wordvecs.txt does not exist' % (self.path, lang))
         else:
-            if lang != 'ta':
-                print('Importing FastText Vectors for %s' % lang)
-                self.vecs[lang] = FastVector(vector_file = '%s/%s/wordvecs.txt' % directory)
+            print('Importing FastText Vectors for %s' % lang)
+            self.vecs[lang] = FastVector(vector_file = '%s/%s/wordvecs.txt' % (self.path, lang))
+
+        # Loads optional wordvecs Annoy Index and IDF pickle
+        if wordvecs_as_annoy:
+            self.vecs['annoy/' + lang] = AnnoyIndex(300, 'angular')
+            if os.path.isfile('%s/%s/wordvecs.ann' % (self.path, lang)):
+                # Loads wordvecs as .ann if it exists
+                self.vecs['annoy/' + lang].load('%s/%s/wordvecs.ann' % (self.path, lang))
+                print('Loading word vectors from %s/%s/wordvecs.ann. If you are not using our flask version, consider deloading this module' % (self.path, lang))
+
+            else:
+                # Re-saves wordvecs as .ann
+                for index, word in enumerate(self.vecs[lang].id2word):
+                    self.vecs['annoy/' + lang].add_item(index, self.vecs[lang][word])
+                self.vecs['annoy/' + lang].build(math.floor(math.log(len(self.vecs[lang].id2word))))
+                self.vecs['annoy/' + lang].save('%s/%s/wordvecs.ann' % (self.path, lang))
+                print('Annoy Index is saved and loaded in %s for %s lang wordvecs' % (self.path, lang))
+
+            if os.path.isfile('%s/pickle/idfs.pkl' % self.path):
+                # Loads IDFs
+                self.idfs = pickle.load( open('%s/pickle/idfs.pkl' % self.path, 'rb'))
+                for lang_ in self.idfs:
+                    self.idfs[lang_] = defaultdict(lambda: float('inf'), self.idfs[lang_])
+                print('Loaded IDFs')
+                
+            else:
+                print('IDFs need to be calculated!')
+
 
         # Load monolingual corpora
-        if lang in self.docs:
-            pass
-        elif not os.path.isfile('%s/%s/articles.pkl.' % directory):
-            raise IOError('File %s/%s/articles.pkl does not exist.' % directory)
+        if os.path.isfile('%s/%s/articles.pkl' % (self.path, lang)):
+            print('Importing articles from %s/%s/articles.pkl.' % (self.path, lang))
+            self.docs[lang] = pickle.load(open('%s/%s/articles.pkl' % (self.path, lang), 'rb'))
         else:
-            print('Importing articles from %s/%s/articles.pkl.' % directory)
-            self.docs[lang] = pickle.load(open('%s/%s/articles.pkl' % directory, 'rb'))
+            raise IOError('File %s/%s/articles.pkl does not exist.' % (self.path, lang))
 
     def calculate(self, model, lang, directory):
+        """
+        Calculates document vectors/sentence vectors for the corpora given the model name.
+        --------------------
+        Models: list(str)
+        Model 1: BWE-Agg-Add on Article Text(baa)
+        Model 2: BWE-Agg-IDF on Article Text (bai)
+        Model 3: LASER Sentence Embeddings on Article Text (laser)
+        Model 4: LASER Embeddings on Article Title (metalaser)
+        Model 5: LASER Sentence Embeddings on Article Sentences (senlaser)
+        Model 6: BWE-Agg-Add on Article Title (meta)
+        Model 7: BWE-Agg-IDF on Article Sentences
+        """
         if model == 'baa':
             print('Calculating document vectors using Bilingual Word Embeddings (Vector Addition) on Article Text.')
             
@@ -133,7 +186,8 @@ class MulLingVectorsAnnoy:
                         else:
                             dfs[token] = 1
                 self.idfs[lang] = dict(zip(dfs, map(lambda x : (math.log(N/x)), dfs.values())))
-                print('IDFs calculated')
+                pickle.dump( self.idfs, open('%s/pickle/idfs.pkl' % self.path, 'wb'))
+                print('IDFs saved at %s/pickle/idfs.pkl' % self.path)
 
             # Second pass
             print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Article Text.')
@@ -230,7 +284,8 @@ class MulLingVectorsAnnoy:
                         else:
                             dfs[token] = 1
                 self.idfs[lang] = dict(zip(dfs, map(lambda x : (math.log(N/x)), dfs.values())))
-                print('IDFs calculated')
+                pickle.dump( self.idfs, open('%s/pickle/idfs.pkl' % self.path, 'wb'))
+                print('IDFs saved at %s/pickle/idfs.pkl' % self.path)
 
             # Second pass
             print('Calculating document vectors using Bilingual Word Embeddings (TF-IDF) on Individual Sentences in Article.')
@@ -256,4 +311,4 @@ class MulLingVectorsAnnoy:
 
         self.docvecs[model][lang].build(math.floor(math.log(len(self.docs[lang]))))
         self.docvecs[model][lang].save('%s/%s/%s.ann' % directory)
-        print('Annoy Index is saved and loaded in %s for %s lang and %s model saved and loaded!' % directory)
+        print('Annoy Index is saved and loaded in %s for %s lang and %s model!' % directory)
