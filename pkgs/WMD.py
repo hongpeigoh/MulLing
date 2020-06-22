@@ -72,7 +72,14 @@ def wmdsimilarity(doc1, doc2, lang1, lang2, vecs, with_flow=False):
             'pdf1':list(d1),
             'pdf2':list(d2),
             'wmd': emd[0],
-            'flow': emd[1]
+            'flow': emd[1],
+            'dist_matrix': distance_matrix.tolist()
         }
     else:
-        return {'tokens':list(dictionary.values), 'pdf1':list(d1), 'pdf2':list(d2), 'wmd':emd(d1, d2, distance_matrix)}
+        return {
+            'tokens':list(dictionary.values),
+            'pdf1':list(d1),
+            'pdf2':list(d2),
+            'wmd':emd(d1, d2, distance_matrix),
+            'dist_matrix': distance_matrix.tolist()
+        }
