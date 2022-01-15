@@ -19,7 +19,7 @@
     "bootstrap": "^4.4.1",
     "bootstrap-4-grid": "^3.4.0",
     "jquery": "^3.4.1",
-    "marked": "^0.8.0",
+    "marked": "^4.0.10",
     "plotly.js-cartesian-dist": "^1.54.1",
     "popper.js": "^1.16.1",
     "react": "^16.13.0",
